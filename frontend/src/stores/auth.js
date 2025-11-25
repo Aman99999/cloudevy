@@ -45,6 +45,7 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null
     user.value = null
     localStorage.removeItem('token')
+    window.location.href = '/'
   }
 
   const fetchCurrentUser = async () => {
