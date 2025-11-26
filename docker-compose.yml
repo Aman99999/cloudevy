@@ -11,6 +11,7 @@ services:
     environment:
       PORT: 8002
       NODE_ENV: development
+      DATABASE_URL: postgresql://cloudevy:cloudevy_dev_password@postgres:5432/cloudevy?schema=public
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: cloudevy
