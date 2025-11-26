@@ -1,0 +1,137 @@
+// CloudEvy Multi-Tenant Database Schema with Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Workspaces (Tenants/Organizations)
+model Workspace {
+  id                 Int      @id @default(autoincrement())
+  name               String   @db.VarChar(255)
+  slug               String   @unique @db.VarChar(255)
+  subscriptionStatus String   @default("trial") @map("subscription_status") @db.VarChar(50)
+  trialEndsAt        DateTime @default(dbgenerated("CURRENT_TIMESTAMP + INTERVAL '14 days'")) @map("trial_ends_at")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  users          User[]
+  cloudAccounts  CloudAccount[]
+  servers        Server[]
+  containers     Container[]
+  auditLogs      AuditLog[]
+
+  @@index([slug])
+  @@map("workspaces")
+}
+
+// Users (linked to workspaces)
+model User {
+  id           Int       @id @default(autoincrement())
+  workspaceId  Int       @map("workspace_id")
+  email        String    @unique @db.VarChar(255)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  fullName     String    @map("full_name") @db.VarChar(255)
+  role         String    @default("owner") @db.VarChar(50)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+
+  // Relations
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  auditLogs AuditLog[]
+
+  @@index([workspaceId])
+  @@index([email])
+  @@map("users")
+}
+
+// Cloud Accounts (AWS, Azure, GCP connections)
+model CloudAccount {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int      @map("workspace_id")
+  provider    String   @db.VarChar(50)
+  accountName String   @map("account_name") @db.VarChar(255)
+  credentials String?  @db.Text
+  region      String?  @db.VarChar(100)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  servers   Server[]
+
+  @@index([workspaceId])
+  @@map("cloud_accounts")
+}
+
+// Servers (Infrastructure resources)
+model Server {
+  id             Int           @id @default(autoincrement())
+  workspaceId    Int           @map("workspace_id")
+  cloudAccountId Int?          @map("cloud_account_id")
+  name           String        @db.VarChar(255)
+  ipAddress      String?       @map("ip_address") @db.VarChar(45)
+  provider       String?       @db.VarChar(50)
+  region         String?       @db.VarChar(100)
+  instanceType   String?       @map("instance_type") @db.VarChar(100)
+  status         String        @default("running") @db.VarChar(50)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cloudAccount CloudAccount? @relation(fields: [cloudAccountId], references: [id], onDelete: SetNull)
+  containers   Container[]
+
+  @@index([workspaceId])
+  @@map("servers")
+}
+
+// Containers (Docker/Podman)
+model Container {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int      @map("workspace_id")
+  serverId    Int?     @map("server_id")
+  containerId String   @map("container_id") @db.VarChar(255)
+  name        String   @db.VarChar(255)
+  image       String?  @db.VarChar(255)
+  status      String?  @db.VarChar(50)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  server    Server?   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("containers")
+}
+
+// Audit Logs (for tracking actions)
+model AuditLog {
+  id           Int      @id @default(autoincrement())
+  workspaceId  Int      @map("workspace_id")
+  userId       Int?     @map("user_id")
+  action       String   @db.VarChar(255)
+  resourceType String?  @map("resource_type") @db.VarChar(100)
+  resourceId   Int?     @map("resource_id")
+  details      String?  @db.Text
+  ipAddress    String?  @map("ip_address") @db.VarChar(45)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

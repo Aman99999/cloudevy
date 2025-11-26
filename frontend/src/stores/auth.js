@@ -20,24 +20,28 @@ export const useAuthStore = defineStore('auth', () => {
     return hierarchy[user.value.role] >= hierarchy[role]
   }
 
-  const login = async (username, password) => {
+  const login = async (email, password) => {
     try {
       const response = await apiClient.post('/auth/login', {
-        username,
+        email,
         password
       })
       
-      token.value = response.data.token
-      user.value = response.data.user
-      
-      localStorage.setItem('token', token.value)
-      
-      return { success: true }
-    } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.error || 'Login failed'
+      if (response.data.success) {
+        token.value = response.data.token
+        user.value = response.data.user
+        
+        localStorage.setItem('token', token.value)
+        
+        return { success: true }
+      } else {
+        return {
+          success: false,
+          message: response.data.message || 'Login failed'
+        }
       }
+    } catch (error) {
+      throw error
     }
   }
 
@@ -51,7 +55,11 @@ export const useAuthStore = defineStore('auth', () => {
   const fetchCurrentUser = async () => {
     try {
       const response = await apiClient.get('/auth/me')
-      user.value = response.data.user
+      if (response.data.success) {
+        user.value = response.data.user
+      } else {
+        logout()
+      }
     } catch (error) {
       logout()
     }

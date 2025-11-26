@@ -27,7 +27,7 @@
               Sign In
             </router-link>
             <router-link
-              to="/login"
+              to="/signup"
               class="relative bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg overflow-hidden group text-sm sm:text-base"
             >
               <span class="relative z-10">Get Started</span>
@@ -58,7 +58,7 @@
             </p>
             <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start">
               <router-link
-                to="/login"
+                to="/signup"
                 class="group relative bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-base sm:text-lg font-semibold overflow-hidden transform hover:scale-105 transition"
               >
                 <span class="relative z-10 flex items-center justify-center">
@@ -434,7 +434,7 @@
           Join teams managing infrastructure the modern way. <span class="text-indigo-400 font-semibold">No credit card required.</span>
         </p>
         <router-link
-          to="/login"
+          to="/signup"
           class="inline-flex items-center bg-white text-gray-900 px-8 sm:px-10 py-4 sm:py-5 rounded-xl text-base sm:text-lg font-bold hover:shadow-2xl hover:shadow-white/20 transition transform hover:-translate-y-1 hover:scale-105"
         >
           Start Your Free Trial

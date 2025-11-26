@@ -1,42 +1,46 @@
 import jwt from 'jsonwebtoken';
-import { findUserById } from '../config/users.js';
 
 export const authenticate = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
+    return res.status(401).json({ 
+      success: false,
+      message: 'No token provided' 
+    });
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = findUserById(decoded.userId);
-
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev_jwt_secret_key_12345');
+    
+    // Attach user info from JWT to request
     req.user = {
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      name: user.name
+      userId: decoded.userId,
+      workspaceId: decoded.workspaceId,
+      email: decoded.email,
+      role: decoded.role
     };
 
     next();
   } catch (error) {
-    return res.status(401).json({ error: 'Invalid token' });
+    return res.status(401).json({ 
+      success: false,
+      message: 'Invalid or expired token' 
+    });
   }
 };
 
 export const authorize = (...allowedRoles) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ error: 'Not authenticated' });
+      return res.status(401).json({ 
+        success: false,
+        message: 'Not authenticated' 
+      });
     }
 
     const roleHierarchy = {
-      super_admin: 3,
+      owner: 3,
       admin: 2,
       viewer: 1
     };
@@ -45,7 +49,10 @@ export const authorize = (...allowedRoles) => {
     const requiredLevel = Math.min(...allowedRoles.map(role => roleHierarchy[role] || 999));
 
     if (userLevel < requiredLevel) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
+      return res.status(403).json({ 
+        success: false,
+        message: 'Insufficient permissions' 
+      });
     }
 
     next();
