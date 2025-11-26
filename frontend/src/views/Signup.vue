@@ -309,10 +309,12 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 import Logo from '@/components/Logo.vue'
 import apiClient from '@/api/client'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const currentStep = ref(1)
 const totalSteps = 5
@@ -436,9 +438,26 @@ const handleSignup = async () => {
     
     success.value = 'Workspace created successfully! Redirecting...'
     
-    setTimeout(() => {
-      router.push('/login')
-    }, 1500)
+    // Auto-login after signup
+    if (response.data.data.token) {
+      // Store token and user data
+      localStorage.setItem('token', response.data.data.token)
+      authStore.token = response.data.data.token
+      authStore.user = {
+        ...response.data.data.user,
+        workspace: response.data.data.workspace
+      }
+      
+      // Redirect to workspace dashboard with slug
+      const slug = response.data.data.workspace.slug
+      setTimeout(() => {
+        router.push(`/${slug}`)
+      }, 1500)
+    } else {
+      setTimeout(() => {
+        router.push('/login')
+      }, 1500)
+    }
     
   } catch (err) {
     error.value = err.response?.data?.message || 'Failed to create workspace. Please try again.'
