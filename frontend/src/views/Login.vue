@@ -90,7 +90,24 @@ const handleLogin = async () => {
     const result = await authStore.login(email.value, password.value)
     
     if (result.success) {
-      router.push('/dashboard')
+      // Wait a moment for user data to be set in store
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Redirect to workspace dashboard with slug in URL
+      const slug = result.workspaceSlug || authStore.user?.workspace?.slug
+      
+      if (slug) {
+        router.push(`/${slug}`)
+      } else {
+        // If still no slug, fetch user data
+        await authStore.fetchCurrentUser()
+        const finalSlug = authStore.user?.workspace?.slug
+        if (finalSlug) {
+          router.push(`/${finalSlug}`)
+        } else {
+          error.value = 'Failed to load workspace information'
+        }
+      }
     } else {
       error.value = result.message || 'Login failed'
     }

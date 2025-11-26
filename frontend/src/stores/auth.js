@@ -33,7 +33,13 @@ export const useAuthStore = defineStore('auth', () => {
         
         localStorage.setItem('token', token.value)
         
-        return { success: true }
+        console.log('Login successful - User:', user.value)
+        console.log('Workspace slug:', user.value?.workspace?.slug)
+        
+        return { 
+          success: true, 
+          workspaceSlug: user.value?.workspace?.slug 
+        }
       } else {
         return {
           success: false,
@@ -57,10 +63,13 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await apiClient.get('/auth/me')
       if (response.data.success) {
         user.value = response.data.user
+        console.log('User loaded:', user.value)
+        console.log('Workspace slug:', user.value?.workspace?.slug)
       } else {
         logout()
       }
     } catch (error) {
+      console.error('Failed to fetch current user:', error)
       logout()
     }
   }

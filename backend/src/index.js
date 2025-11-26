@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
+import dashboardRoutes from './routes/dashboard.js';
+import cloudAccountsRoutes from './routes/cloudAccounts.js';
 
 dotenv.config();
 
@@ -25,6 +27,8 @@ app.get('/health', (req, res) => {
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/cloud-accounts', cloudAccountsRoutes);
 
 // 404 handler
 app.use((req, res) => {
