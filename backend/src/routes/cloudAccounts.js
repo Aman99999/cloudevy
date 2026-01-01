@@ -3,6 +3,7 @@ import { body, validationResult } from 'express-validator';
 import { authenticate } from '../middleware/auth.js';
 import prisma from '../config/prisma.js';
 import crypto from 'crypto';
+import { EC2Client, DescribeInstancesCommand } from '@aws-sdk/client-ec2';
 
 const router = express.Router();
 
@@ -232,6 +233,156 @@ router.get('/', async (req, res) => {
 
 // Export decrypt function for use in other modules (e.g., AWS SDK integration)
 export { decryptCredentials };
+
+/**
+ * GET /api/cloud-accounts/:id/servers
+ * Fetch available servers from cloud provider
+ */
+router.get('/:id/servers', async (req, res) => {
+  try {
+    const cloudAccountId = parseInt(req.params.id);
+    const workspaceId = req.user.workspaceId;
+
+    // Verify cloud account belongs to this workspace
+    const cloudAccount = await prisma.cloudAccount.findFirst({
+      where: {
+        id: cloudAccountId,
+        workspaceId
+      }
+    });
+
+    if (!cloudAccount) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cloud account not found'
+      });
+    }
+
+    // Decrypt credentials
+    const credentials = JSON.parse(decryptCredentials(cloudAccount.credentials));
+
+    // Fetch servers based on provider
+    let servers = [];
+    
+    try {
+      if (cloudAccount.provider === 'aws') {
+        servers = await fetchAWSServers(credentials, cloudAccount.region);
+      } else if (cloudAccount.provider === 'azure') {
+        servers = await fetchAzureServers(credentials);
+      } else if (cloudAccount.provider === 'gcp') {
+        servers = await fetchGCPServers(credentials);
+      }
+    } catch (error) {
+      console.error(`Failed to fetch servers from ${cloudAccount.provider}:`, error);
+      return res.status(500).json({
+        success: false,
+        message: `Failed to fetch servers from ${cloudAccount.provider}. Please check your credentials.`,
+        error: error.message
+      });
+    }
+
+    res.json({
+      success: true,
+      data: servers
+    });
+
+  } catch (error) {
+    console.error('Fetch cloud servers error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch servers from cloud provider'
+    });
+  }
+});
+
+/**
+ * Fetch servers from AWS EC2
+ */
+async function fetchAWSServers(credentials, region) {
+  try {
+    const client = new EC2Client({
+      region: region || 'us-east-1',
+      credentials: {
+        accessKeyId: credentials.accessKey,
+        secretAccessKey: credentials.secretKey
+      }
+    });
+
+    const command = new DescribeInstancesCommand({});
+    const response = await client.send(command);
+
+    // Parse EC2 instances
+    const servers = [];
+    
+    if (response.Reservations) {
+      for (const reservation of response.Reservations) {
+        for (const instance of reservation.Instances || []) {
+          // Find Name tag
+          const nameTag = instance.Tags?.find(tag => tag.Key === 'Name');
+          const name = nameTag?.Value || instance.InstanceId;
+          
+          servers.push({
+            id: instance.InstanceId,
+            name: name,
+            instanceType: instance.InstanceType,
+            state: instance.State?.Name || 'unknown',
+            publicIp: instance.PublicIpAddress || null,
+            privateIp: instance.PrivateIpAddress || null,
+            region: region || 'us-east-1',
+            availabilityZone: instance.Placement?.AvailabilityZone || null,
+            launchTime: instance.LaunchTime?.toISOString() || null
+          });
+        }
+      }
+    }
+
+    return servers;
+  } catch (error) {
+    console.error('AWS API Error:', error);
+    throw new Error(`Failed to fetch AWS servers: ${error.message}`);
+  }
+}
+
+/**
+ * Fetch servers from Azure
+ */
+async function fetchAzureServers(credentials) {
+  // TODO: Implement actual Azure SDK integration
+  // For now, return empty array - implement when Azure is needed
+  
+  console.log('Azure server fetching not yet implemented');
+  return [];
+  
+  // In production, use Azure SDK:
+  // import { ComputeManagementClient } from "@azure/arm-compute"
+  // import { ClientSecretCredential } from "@azure/identity"
+  // 
+  // const credential = new ClientSecretCredential(
+  //   credentials.tenantId,
+  //   credentials.clientId,
+  //   credentials.clientSecret
+  // );
+  // const client = new ComputeManagementClient(credential, credentials.subscriptionId);
+  // const vms = await client.virtualMachines.listAll();
+}
+
+/**
+ * Fetch servers from GCP
+ */
+async function fetchGCPServers(credentials) {
+  // TODO: Implement actual GCP SDK integration
+  // For now, return empty array - implement when GCP is needed
+  
+  console.log('GCP server fetching not yet implemented');
+  return [];
+  
+  // In production, use GCP SDK:
+  // import { InstancesClient } from '@google-cloud/compute'
+  // const client = new InstancesClient({ 
+  //   credentials: JSON.parse(credentials.privateKey)
+  // });
+  // const [instances] = await client.aggregatedList({ project: projectId });
+}
 
 export default router;
 

@@ -1,55 +1,26 @@
 version: '3.8'
 
+# Production Docker Compose for Cloudevy
+# Replace placeholders with your actual values
+
 services:
-  backend:
-    image: cloudevy-backend:latest
-    container_name: cloudevy-backend
-    environment:
-      PORT: 8002
-      NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: cloudevy
-      DB_USER: cloudevy
-      DB_PASSWORD: cloudevy_dev_password
-      INFLUX_URL: http://influxdb:8086
-      INFLUX_TOKEN: cloudevy_dev_token_12345
-      INFLUX_ORG: cloudevy
-      INFLUX_BUCKET: metrics
-      JWT_SECRET: dev_jwt_secret_key_12345
-      JWT_EXPIRES_IN: 24h
-      CORS_ORIGIN: http://localhost:8001
-    ports:
-      - "8002:8002"
-    depends_on:
-      - postgres
-      - influxdb
-    networks:
-      - cloudevy-network
-
-  frontend:
-    image: cloudevy-frontend:latest
-    container_name: cloudevy-frontend
-    ports:
-      - "8001:8001"
-    depends_on:
-      - backend
-    networks:
-      - cloudevy-network
-
   postgres:
     image: postgres:15-alpine
     container_name: cloudevy-postgres
     environment:
-      POSTGRES_DB: cloudevy
       POSTGRES_USER: cloudevy
-      POSTGRES_PASSWORD: cloudevy_dev_password
-    ports:
-      - "5433:5432"
+      POSTGRES_PASSWORD: CHANGE_THIS_PASSWORD_123
+      POSTGRES_DB: cloudevy
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - cloudevy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudevy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   influxdb:
     image: influxdb:2.7-alpine
@@ -57,16 +28,55 @@ services:
     environment:
       DOCKER_INFLUXDB_INIT_MODE: setup
       DOCKER_INFLUXDB_INIT_USERNAME: admin
-      DOCKER_INFLUXDB_INIT_PASSWORD: admin_password
+      DOCKER_INFLUXDB_INIT_PASSWORD: CHANGE_THIS_INFLUX_PASSWORD
       DOCKER_INFLUXDB_INIT_ORG: cloudevy
       DOCKER_INFLUXDB_INIT_BUCKET: metrics
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: cloudevy_dev_token_12345
-    ports:
-      - "8087:8086"
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: CHANGE_THIS_SUPER_SECRET_TOKEN
     volumes:
       - influxdb_data:/var/lib/influxdb2
     networks:
       - cloudevy-network
+    restart: unless-stopped
+
+  backend:
+    image: amankhare/cloudevy-backend:latest
+    container_name: cloudevy-backend
+    environment:
+      NODE_ENV: production
+      PORT: 8002
+      DATABASE_URL: postgresql://cloudevy:CHANGE_THIS_PASSWORD_123@postgres:5432/cloudevy
+      JWT_SECRET: CHANGE_THIS_JWT_SECRET_TO_RANDOM_STRING
+      ENCRYPTION_KEY: CHANGE_THIS_TO_32_CHAR_STRING_12
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      influxdb:
+        condition: service_started
+    networks:
+      - cloudevy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8002/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    image: amankhare/cloudevy-frontend:latest
+    container_name: cloudevy-frontend
+    environment:
+      # IMPORTANT: Change this to your EC2 public IP or domain
+      VITE_API_URL: http://YOUR_EC2_PUBLIC_IP:8002/api
+      # After domain setup, change to: https://cloudevy.in/api
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - cloudevy-network
+    restart: unless-stopped
 
 networks:
   cloudevy-network:
@@ -74,5 +84,6 @@ networks:
 
 volumes:
   postgres_data:
+    driver: local
   influxdb_data:
-
+    driver: local

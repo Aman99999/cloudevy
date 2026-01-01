@@ -1,0 +1,26 @@
+{
+  "name": "cloudevy-downtime-scheduler",
+  "version": "1.0.0",
+  "description": "Cloudevy Scheduled Downtime Service",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": [
+    "scheduler",
+    "downtime",
+    "cloud",
+    "automation"
+  ],
+  "author": "Cloudevy",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-ec2": "^3.478.0",
+    "@prisma/client": "6.19.0",
+    "express": "^4.18.2",
+    "prisma": "6.19.0",
+    "rrule": "^2.8.1"
+  }
+}

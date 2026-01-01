@@ -19,6 +19,11 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-cloudwatch": "^3.705.0",
+    "@aws-sdk/client-ec2": "^3.705.0",
+    "@azure/arm-compute": "^21.1.0",
+    "@azure/identity": "^4.5.0",
+    "@google-cloud/compute": "^4.10.0",
     "@prisma/client": "^6.19.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
@@ -28,6 +33,7 @@
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
     "pg": "^8.13.1",
-    "prisma": "^6.19.0"
+    "prisma": "^6.19.0",
+    "rrule": "^2.8.1"
   }
 }

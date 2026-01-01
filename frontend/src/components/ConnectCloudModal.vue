@@ -203,6 +203,20 @@
                     <span class="px-4 bg-gray-800 text-gray-400 font-medium">Connection Details</span>
                   </div>
                 </div>
+
+                <!-- Show Instructions Button -->
+                <div class="flex justify-center">
+                  <button
+                    @click="showInstructions = true"
+                    type="button"
+                    class="inline-flex items-center px-5 py-2.5 bg-gray-700/50 hover:bg-gray-700 text-white rounded-xl font-medium transition-all hover:scale-105 shadow-lg border border-gray-600/50"
+                  >
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Show Instructions
+                  </button>
+                </div>
               
                 <div class="grid sm:grid-cols-2 gap-5">
                   <div class="sm:col-span-2">
@@ -215,6 +229,12 @@
                       :placeholder="`My ${selectedProvider.toUpperCase()} Account`"
                       class="w-full px-4 py-3.5 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-inner"
                     />
+                    <p class="text-xs text-gray-500 mt-2 flex items-center space-x-1">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                      </svg>
+                      <span>Choose a friendly name to identify this account in Cloudevy (e.g., "Production AWS", "Dev Environment", "Company Azure")</span>
+                    </p>
                   </div>
 
                   <div>
@@ -336,6 +356,402 @@
         </div>
       </div>
     </Transition>
+
+    <!-- Instructions Modal -->
+    <Transition name="modal">
+      <div
+        v-if="showInstructions"
+        class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+        @click.self="showInstructions = false"
+      >
+        <div class="relative w-full max-w-4xl max-h-[90vh] bg-gradient-to-br from-gray-800 via-gray-800 to-gray-900 rounded-3xl border border-gray-700/50 shadow-2xl overflow-hidden backdrop-blur-xl flex flex-col">
+          <!-- Header -->
+          <div class="relative p-6 border-b border-gray-700/50 flex-shrink-0">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="text-2xl font-bold text-white">
+                    {{ selectedProvider === 'aws' ? 'AWS' : selectedProvider === 'azure' ? 'Azure' : 'GCP' }} Connection Instructions
+                  </h3>
+                  <p class="text-gray-400 text-sm">Follow these steps to get your credentials</p>
+                </div>
+              </div>
+              <button
+                @click="showInstructions = false"
+                class="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-700/50 hover:bg-gray-700 text-gray-400 hover:text-white transition-all hover:scale-110"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Content - Scrollable -->
+          <div class="relative p-6 overflow-y-auto flex-1">
+            <!-- AWS Instructions -->
+            <div v-if="selectedProvider === 'aws'" class="space-y-6">
+              <div class="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4">
+                <div class="flex items-start space-x-3">
+                  <svg class="w-6 h-6 text-orange-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  <div>
+                    <h4 class="text-orange-400 font-semibold mb-1">Before You Begin</h4>
+                    <p class="text-gray-300 text-sm">You'll need an active AWS account with administrator access to create IAM credentials.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-5">
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">1</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Log into AWS Console</h5>
+                    <p class="text-gray-400 text-sm mb-2">Go to <a href="https://console.aws.amazon.com" target="_blank" class="text-orange-400 hover:text-orange-300 underline">console.aws.amazon.com</a> and sign in with your AWS account credentials.</p>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">2</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Navigate to IAM Service</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>In the AWS Console, search for "IAM" in the top search bar</li>
+                      <li>Click on "IAM" (Identity and Access Management)</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">3</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Create a New User</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>Click "Users" in the left sidebar</li>
+                      <li>Click "Add users" or "Create user" button</li>
+                      <li>Enter a username (e.g., "cloudevy-access")</li>
+                      <li>Click "Next"</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">4</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Set Permissions</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>Select "Attach policies directly"</li>
+                      <li>Search and select <code class="bg-gray-900/50 px-2 py-0.5 rounded text-orange-400">ReadOnlyAccess</code> for read-only monitoring</li>
+                      <li>Or select <code class="bg-gray-900/50 px-2 py-0.5 rounded text-orange-400">PowerUserAccess</code> for full management</li>
+                      <li>Click "Next" and then "Create user"</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">5</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Create Access Keys</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>Click on the newly created user</li>
+                      <li>Go to the "Security credentials" tab</li>
+                      <li>Scroll to "Access keys" section</li>
+                      <li>Click "Create access key"</li>
+                      <li>Select "Third-party service" or "Application running outside AWS"</li>
+                      <li>Check the confirmation box and click "Next"</li>
+                      <li>Add a description tag (optional) and click "Create access key"</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">6</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Copy Your Credentials</h5>
+                    <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-2">
+                      <p class="text-yellow-300 text-sm font-medium">⚠️ Important: This is your only chance to view the Secret Access Key!</p>
+                    </div>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>Copy the <strong class="text-white">Access Key ID</strong></li>
+                      <li>Copy the <strong class="text-white">Secret Access Key</strong></li>
+                      <li>Store them securely or paste them directly into Cloudevy</li>
+                      <li>Click "Done"</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Azure Instructions -->
+            <div v-if="selectedProvider === 'azure'" class="space-y-6">
+              <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                <div class="flex items-start space-x-3">
+                  <svg class="w-6 h-6 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  <div>
+                    <h4 class="text-blue-400 font-semibold mb-1">Before You Begin</h4>
+                    <p class="text-gray-300 text-sm">You'll need an active Azure account with permissions to create service principals and app registrations.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-5">
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">1</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Log into Azure Portal</h5>
+                    <p class="text-gray-400 text-sm mb-2">Go to <a href="https://portal.azure.com" target="_blank" class="text-blue-400 hover:text-blue-300 underline">portal.azure.com</a> and sign in with your Microsoft account.</p>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">2</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Navigate to App Registrations</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>In the Azure Portal, search for "App registrations" in the top search bar</li>
+                      <li>Click on "App registrations"</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">3</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Create New Registration</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>Click "+ New registration"</li>
+                      <li>Enter a name (e.g., "cloudevy-app")</li>
+                      <li>Select "Accounts in this organizational directory only"</li>
+                      <li>Click "Register"</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">4</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Copy Application IDs</h5>
+                    <p class="text-gray-400 text-sm mb-2">From the Overview page, copy these values:</p>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li><strong class="text-white">Application (client) ID</strong> - This is your Access Key ID</li>
+                      <li><strong class="text-white">Directory (tenant) ID</strong> - Save this for later</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">5</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Create Client Secret</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>Click "Certificates & secrets" in the left sidebar</li>
+                      <li>Click "+ New client secret"</li>
+                      <li>Add a description (e.g., "Cloudevy access")</li>
+                      <li>Select an expiration period</li>
+                      <li>Click "Add"</li>
+                      <li>Copy the <strong class="text-white">Value</strong> immediately - This is your Secret Access Key</li>
+                    </ul>
+                    <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mt-2">
+                      <p class="text-yellow-300 text-sm font-medium">⚠️ Important: Copy the secret value now - you won't be able to see it again!</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">6</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Assign Permissions</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>Go to "Subscriptions" in the Azure Portal</li>
+                      <li>Select your subscription</li>
+                      <li>Click "Access control (IAM)"</li>
+                      <li>Click "+ Add" → "Add role assignment"</li>
+                      <li>Select "Reader" role (for read-only) or "Contributor" role (for management)</li>
+                      <li>Search and select your app registration</li>
+                      <li>Click "Review + assign"</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">7</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Use Your Credentials</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li><strong class="text-white">Access Key ID:</strong> Use your Application (client) ID</li>
+                      <li><strong class="text-white">Secret Access Key:</strong> Use your Client secret value</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- GCP Instructions -->
+            <div v-if="selectedProvider === 'gcp'" class="space-y-6">
+              <div class="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+                <div class="flex items-start space-x-3">
+                  <svg class="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  <div>
+                    <h4 class="text-red-400 font-semibold mb-1">Before You Begin</h4>
+                    <p class="text-gray-300 text-sm">You'll need an active Google Cloud account with permissions to create service accounts and manage IAM.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-5">
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">1</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Log into Google Cloud Console</h5>
+                    <p class="text-gray-400 text-sm mb-2">Go to <a href="https://console.cloud.google.com" target="_blank" class="text-red-400 hover:text-red-300 underline">console.cloud.google.com</a> and sign in with your Google account.</p>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">2</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Select or Create a Project</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>Click the project dropdown at the top of the page</li>
+                      <li>Select an existing project or click "New Project"</li>
+                      <li>If creating new, enter a project name and click "Create"</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">3</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Enable Required APIs</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>Go to "APIs & Services" → "Library"</li>
+                      <li>Search for and enable: "Compute Engine API", "Cloud Resource Manager API"</li>
+                      <li>Click "Enable" for each API</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">4</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Create Service Account</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>Go to "IAM & Admin" → "Service Accounts"</li>
+                      <li>Click "+ Create Service Account"</li>
+                      <li>Enter a name (e.g., "cloudevy-service")</li>
+                      <li>Add a description (optional)</li>
+                      <li>Click "Create and Continue"</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">5</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Grant Permissions</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>Select role: "Viewer" (for read-only access) or "Editor" (for management)</li>
+                      <li>Click "Continue"</li>
+                      <li>Click "Done"</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">6</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Create and Download Key</h5>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li>Click on the service account you just created</li>
+                      <li>Go to the "Keys" tab</li>
+                      <li>Click "Add Key" → "Create new key"</li>
+                      <li>Select "JSON" as the key type</li>
+                      <li>Click "Create"</li>
+                      <li>A JSON file will be downloaded automatically</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                  <div class="w-8 h-8 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <span class="text-white font-bold text-sm">7</span>
+                  </div>
+                  <div class="flex-1">
+                    <h5 class="text-white font-semibold mb-2">Extract Credentials from JSON</h5>
+                    <p class="text-gray-400 text-sm mb-2">Open the downloaded JSON file and find these values:</p>
+                    <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+                      <li><strong class="text-white">Access Key ID:</strong> Use the value from <code class="bg-gray-900/50 px-2 py-0.5 rounded text-red-400">"client_email"</code></li>
+                      <li><strong class="text-white">Secret Access Key:</strong> Use the value from <code class="bg-gray-900/50 px-2 py-0.5 rounded text-red-400">"private_key"</code></li>
+                    </ul>
+                    <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mt-2">
+                      <p class="text-blue-300 text-sm">💡 Tip: You can paste the entire JSON content as the Secret Access Key if preferred.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="relative p-6 border-t border-gray-700/50 bg-gray-900/30 flex justify-end flex-shrink-0">
+            <button
+              @click="showInstructions = false"
+              class="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all hover:scale-105 shadow-lg"
+            >
+              Got it!
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </Teleport>
 </template>
 
@@ -356,6 +772,7 @@ const selectedProvider = ref('')
 const showSecret = ref(false)
 const loading = ref(false)
 const error = ref('')
+const showInstructions = ref(false)
 
 const form = ref({
   accountName: '',

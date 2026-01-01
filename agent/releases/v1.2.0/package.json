@@ -1,0 +1,14 @@
+{
+  "name": "cloudevy-agent",
+  "version": "1.2.0",
+  "type": "module",
+  "description": "Cloudevy monitoring agent for real-time server metrics",
+  "main": "cloudevy-agent.js",
+  "scripts": {
+    "start": "node cloudevy-agent.js"
+  },
+  "keywords": ["monitoring", "metrics", "cloudevy"],
+  "author": "Cloudevy",
+  "license": "MIT"
+}
+

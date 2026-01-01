@@ -2,31 +2,34 @@
 
 set -e
 
-echo "🛑 Stopping existing containers..."
-docker-compose down
-
-echo "🐳 Rebuilding Docker Images"
-
-# Build backend
-echo "🔧 Building backend..."
-docker-compose build backend
-
-# Build frontend
-echo "🎨 Building frontend..."
-docker-compose build frontend
-
-# Pull database images
-echo "📦 Pulling database images..."
-docker-compose pull postgres influxdb
-
-# Start containers
-echo "🚀 Starting all containers..."
-docker-compose up -d
-
-echo "✅ All images built and containers started successfully"
+echo "🐳 Building Production Images (linux/amd64)"
 echo ""
-echo "Access:"
-echo "  Frontend: http://localhost:8001"
-echo "  Backend:  http://localhost:8002"
 
+# Build backend for production
+echo "🔧 Building backend for linux/amd64..."
+docker buildx build --platform linux/amd64 -t cloudevy-backend:latest --load ./backend
 
+# Build frontend for production
+echo "🎨 Building frontend for linux/amd64..."
+docker buildx build --platform linux/amd64 -t cloudevy-frontend:latest --load ./frontend
+
+# Build agent for production
+echo "📊 Building agent for linux/amd64..."
+docker buildx build --platform linux/amd64 -t cloudevy-agent:latest --load ./agent
+
+# Build downtime-scheduler for production (from root context to access backend/prisma)
+echo "🕐 Building downtime-scheduler for linux/amd64..."
+docker buildx build --platform linux/amd64 -f downtime-scheduler/Dockerfile -t cloudevy-downtime-scheduler:latest --load .
+
+echo ""
+echo "✅ All production images built successfully!"
+echo ""
+echo "📋 Images built:"
+echo "  - cloudevy-backend:latest"
+echo "  - cloudevy-frontend:latest"
+echo "  - cloudevy-agent:latest"
+echo "  - cloudevy-downtime-scheduler:latest"
+echo ""
+echo "📋 Next steps:"
+echo "  1. Push to Docker Hub: ./push-images.sh"
+echo ""

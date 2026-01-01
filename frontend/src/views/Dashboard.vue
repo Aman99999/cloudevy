@@ -153,7 +153,14 @@
               </svg>
               <div class="absolute inset-0 bg-gradient-to-r from-indigo-700 to-purple-700 opacity-0 group-hover:opacity-100 transition-opacity"></div>
             </button>
-            <button class="w-full group bg-gray-700/50 hover:bg-gray-700 text-white px-5 py-4 rounded-xl font-medium transition-all hover:scale-[1.02] flex items-center justify-between border border-gray-600/50 hover:border-gray-500">
+            <button
+              @click="handleAddServer"
+              :disabled="stats.providers === 0"
+              :class="[
+                'w-full group bg-gray-700/50 hover:bg-gray-700 text-white px-5 py-4 rounded-xl font-medium transition-all hover:scale-[1.02] flex items-center justify-between border border-gray-600/50 hover:border-gray-500',
+                stats.providers === 0 ? 'opacity-50 cursor-not-allowed' : ''
+              ]"
+            >
               <span class="flex items-center space-x-3">
                 <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -253,7 +260,7 @@
       </div>
 
       <!-- Getting Started (if no data) -->
-      <div v-if="stats.servers === 0 && stats.containers === 0" class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10 border border-indigo-500/20 backdrop-blur-sm">
+      <div v-if="stats.providers === 0" class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10 border border-indigo-500/20 backdrop-blur-sm">
         <div class="absolute inset-0 bg-grid-pattern opacity-5"></div>
         <div class="absolute top-0 right-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
         <div class="absolute bottom-0 left-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl"></div>
@@ -288,6 +295,13 @@
       @close="showConnectModal = false"
       @connected="handleCloudConnected"
     />
+
+    <!-- Add Server Modal -->
+    <AddServerModal
+      :is-open="showAddServerModal"
+      @close="showAddServerModal = false"
+      @server-added="handleServerAdded"
+    />
   </div>
 </template>
 
@@ -296,6 +310,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import ConnectCloudModal from '@/components/ConnectCloudModal.vue'
+import AddServerModal from '@/components/AddServerModal.vue'
 import apiClient from '@/api/client'
 
 const router = useRouter()
@@ -311,6 +326,7 @@ const stats = ref({
 const recentActivity = ref([])
 const loading = ref(false)
 const showConnectModal = ref(false)
+const showAddServerModal = ref(false)
 
 const isTrial = computed(() => {
   return true // For now, assume trial
@@ -344,6 +360,20 @@ const handleCloudConnected = (data) => {
   fetchDashboardData()
   // Show success message or notification
   console.log('Cloud account connected:', data)
+}
+
+const handleAddServer = () => {
+  if (stats.value.providers === 0) {
+    // Show message that they need to connect a cloud account first
+    return
+  }
+  showAddServerModal.value = true
+}
+
+const handleServerAdded = (data) => {
+  // Refresh dashboard data after adding server
+  fetchDashboardData()
+  console.log('Server added:', data)
 }
 
 onMounted(() => {

@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: cloudevy-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=cloudevy
+      - POSTGRES_PASSWORD=cloudevy_secure_db_pass_2024
+      - POSTGRES_DB=cloudevy
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - cloudevy-net
+
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: cloudevy-influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=cloudevy_influx_pass_2024
+      - DOCKER_INFLUXDB_INIT_ORG=cloudevy
+      - DOCKER_INFLUXDB_INIT_BUCKET=metrics
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=cloudevy_influx_token_2024
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    restart: unless-stopped
+    networks:
+      - cloudevy-net
+
+  backend:
+    image: docker.io/cloudevy/cloudevy-backend:latest
+    platform: linux/amd64
+    container_name: cloudevy-backend
+    ports:
+      - "8002:8002"
+    environment:
+      - NODE_ENV=production
+      - PORT=8002
+      - DATABASE_URL=postgresql://cloudevy:cloudevy_secure_db_pass_2024@postgres:5432/cloudevy?schema=public
+      - JWT_SECRET=cloudevy_jwt_secret_change_me_min_32_chars_prod
+      - ENCRYPTION_KEY=cloudevy_encryption_key_32chars
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=cloudevy_influx_token_2024
+      - INFLUXDB_ORG=cloudevy
+      - INFLUXDB_BUCKET=metrics
+    command: sh -c "npx prisma migrate deploy && node src/index.js"
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - influxdb
+    networks:
+      - cloudevy-net
+
+  frontend:
+    image: docker.io/cloudevy/cloudevy-frontend:latest
+    platform: linux/amd64
+    container_name: cloudevy-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - cloudevy-net
+
+  downtime-scheduler:
+    image: docker.io/cloudevy/cloudevy-downtime-scheduler:latest
+    platform: linux/amd64
+    container_name: cloudevy-downtime-scheduler
+    ports:
+      - "8003:8003"
+    environment:
+      - NODE_ENV=production
+      - PORT=8003
+      - DATABASE_URL=postgresql://cloudevy:cloudevy_secure_db_pass_2024@postgres:5432/cloudevy?schema=public
+      - ENCRYPTION_KEY=cloudevy_encryption_key_32chars
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - backend
+    networks:
+      - cloudevy-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: cloudevy-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/cloudevy-ssl.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - cloudevy-net
+
+volumes:
+  postgres_data:
+  influxdb_data:
+
+networks:
+  cloudevy-net:
+    driver: bridge
