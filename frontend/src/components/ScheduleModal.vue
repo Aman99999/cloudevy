@@ -191,7 +191,7 @@
               :disabled="saving"
               class="px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition disabled:opacity-50"
             >
-              {{ saving ? 'Creating...' : 'Create Schedule' }}
+              {{ saving ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Schedule' : 'Create Schedule') }}
             </button>
           </div>
         </form>
@@ -209,11 +209,16 @@ const props = defineProps({
   server: {
     type: Object,
     required: true
+  },
+  schedule: {
+    type: Object,
+    default: null
   }
 });
 
 const emit = defineEmits(['close', 'saved']);
 
+const isEditMode = computed(() => !!props.schedule);
 const saving = ref(false);
 const scheduleType = ref('daily');
 const stopTime = ref('21:00');
@@ -272,13 +277,50 @@ const autoStartDescription = computed(() => {
 });
 
 onMounted(() => {
-  // Default schedule name
-  form.value.name = `${props.server.name} - Nightly Shutdown`;
-  autoStartForm.value.name = `${props.server.name} - Morning Startup`;
-  
-  // Generate initial rrules
-  updateRRule();
-  updateAutoStartRRule();
+  if (isEditMode.value) {
+    // Load existing schedule data
+    form.value.name = props.schedule.name;
+    form.value.action = props.schedule.action;
+    form.value.rrule = props.schedule.rrule;
+    form.value.timezone = props.schedule.timezone;
+    
+    // Parse rrule to extract time and type
+    const rrule = props.schedule.rrule;
+    const hourMatch = rrule.match(/BYHOUR=(\d+)/);
+    const minuteMatch = rrule.match(/BYMINUTE=(\d+)/);
+    
+    if (hourMatch && minuteMatch) {
+      stopTime.value = `${hourMatch[1].padStart(2, '0')}:${minuteMatch[1].padStart(2, '0')}`;
+    }
+    
+    // Determine schedule type from rrule
+    if (rrule.includes('BYDAY=MO,TU,WE,TH,FR')) {
+      scheduleType.value = 'weekdays';
+    } else if (rrule.includes('BYDAY=SA,SU')) {
+      scheduleType.value = 'weekends';
+    } else if (rrule.includes('FREQ=WEEKLY')) {
+      scheduleType.value = 'weekly';
+      // Parse selected days if weekly
+      const daysMatch = rrule.match(/BYDAY=([A-Z,]+)/);
+      if (daysMatch) {
+        const dayMap = { 'MO': 0, 'TU': 1, 'WE': 2, 'TH': 3, 'FR': 4, 'SA': 5, 'SU': 6 };
+        const days = daysMatch[1].split(',').map(d => dayMap[d]).filter(d => d !== undefined);
+        selectedDays.value = days;
+      }
+    } else if (rrule.includes('FREQ=DAILY')) {
+      scheduleType.value = 'daily';
+    } else {
+      scheduleType.value = 'custom';
+    }
+  } else {
+    // Default schedule name
+    form.value.name = `${props.server.name} - Nightly Shutdown`;
+    autoStartForm.value.name = `${props.server.name} - Morning Startup`;
+    
+    // Generate initial rrules
+    updateRRule();
+    updateAutoStartRRule();
+  }
 });
 
 function selectAction(action) {
@@ -393,16 +435,29 @@ async function saveSchedule() {
   try {
     saving.value = true;
     
-    // Create the main schedule (stop/start/reboot)
-    await apiClient.post('/schedules', form.value);
-    
-    // If Stop action with auto-start, create a second schedule for starting
-    if (form.value.action === 'stop' && enableAutoStart.value) {
-      await apiClient.post('/schedules', autoStartForm.value);
+    if (isEditMode.value) {
+      // Update existing schedule
+      await apiClient.put(`/schedules/${props.schedule.id}`, {
+        name: form.value.name,
+        action: form.value.action,
+        rrule: form.value.rrule,
+        timezone: form.value.timezone
+      });
+      
+      emit('saved');
+      emit('close');
+    } else {
+      // Create the main schedule (stop/start/reboot)
+      await apiClient.post('/schedules', form.value);
+      
+      // If Stop action with auto-start, create a second schedule for starting
+      if (form.value.action === 'stop' && enableAutoStart.value) {
+        await apiClient.post('/schedules', autoStartForm.value);
+      }
+      
+      emit('saved');
+      emit('close');
     }
-    
-    emit('saved');
-    emit('close');
   } catch (error) {
     console.error('Failed to save schedule:', error);
     alert(error.response?.data?.message || 'Failed to save schedule');

@@ -251,6 +251,15 @@
       @saved="handleScheduleSaved"
     />
 
+    <!-- Server Schedules Modal -->
+    <ServerSchedulesModal
+      v-if="showSchedulesModal"
+      :is-open="showSchedulesModal"
+      :server="selectedServer"
+      @close="showSchedulesModal = false"
+      @updated="fetchServers"
+    />
+
     <!-- Floating Refresh Button -->
     <button
       @click="refreshPage"
@@ -270,6 +279,7 @@ import AddServerModal from '@/components/AddServerModal.vue'
 import ServerDetailsModal from '@/components/ServerDetailsModal.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ScheduleModal from '@/components/ScheduleModal.vue'
+import ServerSchedulesModal from '@/components/ServerSchedulesModal.vue'
 import apiClient from '@/api/client'
 import { useToast } from '@/composables/useToast'
 
