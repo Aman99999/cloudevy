@@ -11,9 +11,9 @@ services:
     environment:
       PORT: 8002
       NODE_ENV: development
-      DATABASE_URL: postgresql://cloudevy:cloudevy_dev_password@postgres:5432/cloudevy?schema=public
+      DATABASE_URL: postgresql://cloudevy:cloudevy_dev_password@postgres:5433/cloudevy?schema=public
       DB_HOST: postgres
-      DB_PORT: 5432
+      DB_PORT: 5433
       DB_NAME: cloudevy
       DB_USER: cloudevy
       DB_PASSWORD: cloudevy_dev_password
@@ -23,7 +23,6 @@ services:
       INFLUX_BUCKET: metrics
       JWT_SECRET: dev_jwt_secret_key_12345
       JWT_EXPIRES_IN: 24h
-      CORS_ORIGIN: http://localhost:8001
       ENCRYPTION_KEY: cloudevy-dev-encryption-key-32-chars!!
     ports:
       - "8002:8002"
@@ -57,8 +56,9 @@ services:
       POSTGRES_DB: cloudevy
       POSTGRES_USER: cloudevy
       POSTGRES_PASSWORD: cloudevy_dev_password
+      PGPORT: 5433
     ports:
-      - "5433:5432"
+      - "5433:5433"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -69,6 +69,27 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  downtime-scheduler:
+    build:
+      context: .
+      dockerfile: downtime-scheduler/Dockerfile
+    platform: linux/arm64
+    image: cloudevy-downtime-scheduler:latest
+    container_name: cloudevy-downtime-scheduler
+    environment:
+      NODE_ENV: development
+      PORT: 8003
+      DATABASE_URL: postgresql://cloudevy:cloudevy_dev_password@postgres:5433/cloudevy?schema=public
+      ENCRYPTION_KEY: cloudevy-dev-encryption-key-32-chars!!
+    ports:
+      - "8003:8003"
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - backend
+    networks:
+      - cloudevy-network
 
   influxdb:
     image: influxdb:2.7-alpine
@@ -82,7 +103,7 @@ services:
       DOCKER_INFLUXDB_INIT_BUCKET: metrics
       DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: cloudevy_dev_token_12345
     ports:
-      - "8087:8086"
+      - "8086:8086"
     volumes:
       - influxdb_data:/var/lib/influxdb2
     restart: unless-stopped

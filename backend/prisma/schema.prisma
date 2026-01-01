@@ -26,6 +26,7 @@ model Workspace {
   servers        Server[]
   containers     Container[]
   auditLogs      AuditLog[]
+  schedules      Schedule[]
 
   @@index([slug])
   @@map("workspaces")
@@ -75,25 +76,77 @@ model CloudAccount {
 
 // Servers (Infrastructure resources)
 model Server {
-  id             Int           @id @default(autoincrement())
-  workspaceId    Int           @map("workspace_id")
-  cloudAccountId Int?          @map("cloud_account_id")
-  name           String        @db.VarChar(255)
-  ipAddress      String?       @map("ip_address") @db.VarChar(45)
-  provider       String?       @db.VarChar(50)
-  region         String?       @db.VarChar(100)
-  instanceType   String?       @map("instance_type") @db.VarChar(100)
-  status         String        @default("running") @db.VarChar(50)
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  id               Int           @id @default(autoincrement())
+  workspaceId      Int           @map("workspace_id")
+  cloudAccountId   Int?          @map("cloud_account_id")
+  name             String        @db.VarChar(255)
+  ipAddress        String?       @map("ip_address") @db.VarChar(45)
+  provider         String?       @db.VarChar(50)
+  region           String?       @db.VarChar(100)
+  instanceType     String?       @map("instance_type") @db.VarChar(100)
+  instanceId       String?       @map("instance_id") @db.VarChar(255)
+  apiKey           String?       @unique @map("api_key") @db.VarChar(255)
+  status           String        @default("running") @db.VarChar(50)
+  agentVersion     String?       @map("agent_version") @db.VarChar(20)
+  lastAgentContact DateTime?     @map("last_agent_contact")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
 
   // Relations
   workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   cloudAccount CloudAccount? @relation(fields: [cloudAccountId], references: [id], onDelete: SetNull)
   containers   Container[]
+  schedules    Schedule[]
 
   @@index([workspaceId])
+  @@index([apiKey])
   @@map("servers")
+}
+
+// Scheduled Downtime (for server automation)
+model Schedule {
+  id             Int       @id @default(autoincrement())
+  workspaceId    Int       @map("workspace_id")
+  serverId       Int       @map("server_id")
+  name           String    @db.VarChar(255)
+  action         String    @db.VarChar(50)   // 'stop', 'start', 'reboot'
+  rrule          String    @db.Text          // RRule string (e.g., 'FREQ=DAILY;BYHOUR=21')
+  timezone       String    @db.VarChar(100)  @default("UTC")
+  enabled        Boolean   @default(true)
+  nextRunAt      DateTime  @map("next_run_at")
+  lastRunAt      DateTime? @map("last_run_at")
+  executionCount Int       @default(0) @map("execution_count")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  server     Server              @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  executions ScheduleExecution[]
+
+  @@index([workspaceId])
+  @@index([serverId])
+  @@index([enabled])
+  @@index([nextRunAt])
+  @@map("schedules")
+}
+
+// Schedule Execution History
+model ScheduleExecution {
+  id         Int      @id @default(autoincrement())
+  scheduleId Int      @map("schedule_id")
+  action     String   @db.VarChar(50)
+  status     String   @db.VarChar(50)   // 'success', 'failed'
+  errorMsg   String?  @map("error_msg") @db.Text
+  duration   Int                         // milliseconds
+  executedAt DateTime @default(now()) @map("executed_at")
+
+  // Relations
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId])
+  @@index([executedAt])
+  @@map("schedule_executions")
 }
 
 // Containers (Docker/Podman)

@@ -1,0 +1,22 @@
+{
+  "name": "cloudevy-agent",
+  "version": "1.0.0",
+  "description": "Lightweight monitoring agent for Cloudevy",
+  "main": "cloudevy-agent.js",
+  "type": "module",
+  "scripts": {
+    "start": "node cloudevy-agent.js",
+    "install-service": "node install-service.js"
+  },
+  "keywords": [
+    "monitoring",
+    "metrics",
+    "cloudevy"
+  ],
+  "author": "Cloudevy",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}
+

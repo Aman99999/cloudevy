@@ -14,7 +14,7 @@ docker-compose build backend
 
 # Start containers
 echo "🚀 Starting all containers..."
-docker-compose up -d
+docker-compose up -
 
 echo "✅ All images built and containers started successfully"
 echo ""

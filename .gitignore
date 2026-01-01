@@ -40,3 +40,9 @@ Thumbs.db
 # Docker
 docker-compose.override.yml
 
+# ⚠️  Scripts with hardcoded credentials
+push-images.sh
+
+# ⚠️  Prevent duplicate Prisma directories
+downtime-scheduler/prisma/
+
