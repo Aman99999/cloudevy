@@ -27,6 +27,8 @@ model Workspace {
   containers     Container[]
   auditLogs      AuditLog[]
   schedules      Schedule[]
+  invitations    WorkspaceInvitation[]
+  members        WorkspaceMember[]
 
   @@index([slug])
   @@map("workspaces")
@@ -48,6 +50,8 @@ model User {
   // Relations
   workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   auditLogs AuditLog[]
+  workspaceMemberships WorkspaceMember[] @relation("UserMemberships")
+  sentInvitations WorkspaceInvitation[] @relation("InvitedBy")
 
   @@index([workspaceId])
   @@index([email])
@@ -93,10 +97,11 @@ model Server {
   updatedAt        DateTime      @updatedAt @map("updated_at")
 
   // Relations
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  cloudAccount CloudAccount? @relation(fields: [cloudAccountId], references: [id], onDelete: SetNull)
-  containers   Container[]
-  schedules    Schedule[]
+  workspace      Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cloudAccount   CloudAccount?         @relation(fields: [cloudAccountId], references: [id], onDelete: SetNull)
+  containers     Container[]
+  schedules      Schedule[]
+  networkTraffic NetworkTrafficHourly[]
 
   @@index([workspaceId])
   @@index([apiKey])
@@ -105,19 +110,30 @@ model Server {
 
 // Scheduled Downtime (for server automation)
 model Schedule {
-  id             Int       @id @default(autoincrement())
-  workspaceId    Int       @map("workspace_id")
-  serverId       Int       @map("server_id")
-  name           String    @db.VarChar(255)
-  action         String    @db.VarChar(50)   // 'stop', 'start', 'reboot'
-  rrule          String    @db.Text          // RRule string (e.g., 'FREQ=DAILY;BYHOUR=21')
-  timezone       String    @db.VarChar(100)  @default("UTC")
-  enabled        Boolean   @default(true)
-  nextRunAt      DateTime  @map("next_run_at")
-  lastRunAt      DateTime? @map("last_run_at")
-  executionCount Int       @default(0) @map("execution_count")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id                     Int       @id @default(autoincrement())
+  workspaceId            Int       @map("workspace_id")
+  serverId               Int       @map("server_id")
+  name                   String    @db.VarChar(255)
+  action                 String    @db.VarChar(50)   // 'stop', 'start', 'reboot', 'scale_down', 'scale_up'
+  rrule                  String    @db.Text          // RRule string (e.g., 'FREQ=DAILY;BYHOUR=21')
+  timezone               String    @db.VarChar(100)  @default("UTC")
+  enabled                Boolean   @default(true)
+  nextRunAt              DateTime  @map("next_run_at")
+  lastRunAt              DateTime? @map("last_run_at")
+  executionCount         Int       @default(0) @map("execution_count")
+  targetInstanceType     String?   @map("target_instance_type") @db.VarChar(100) // For scale_down/scale_up actions
+  originalInstanceType   String?   @map("original_instance_type") @db.VarChar(100) // Store original for scale_up
+  // EBS Volume scaling fields
+  targetVolumeSize       Int?      @map("target_volume_size") // In GB
+  targetVolumeType       String?   @map("target_volume_type") @db.VarChar(50) // gp2, gp3, io1, io2, st1, sc1
+  targetVolumeIops       Int?      @map("target_volume_iops") // Provisioned IOPS
+  targetVolumeThroughput Int?      @map("target_volume_throughput") // MB/s for gp3
+  originalVolumeSize     Int?      @map("original_volume_size")
+  originalVolumeType     String?   @map("original_volume_type") @db.VarChar(50)
+  originalVolumeIops     Int?      @map("original_volume_iops")
+  originalVolumeThroughput Int?    @map("original_volume_throughput")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
 
   // Relations
   workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -187,4 +203,72 @@ model AuditLog {
   @@index([workspaceId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// Workspace Invitations
+model WorkspaceInvitation {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int       @map("workspace_id")
+  email       String    @db.VarChar(255)
+  token       String    @unique @db.VarChar(255)
+  role        String    @default("member") @db.VarChar(50) // admin, member, viewer
+  status      String    @default("pending") @db.VarChar(50) // pending, accepted, expired, revoked
+  invitedBy   Int       @map("invited_by")
+  expiresAt   DateTime  @map("expires_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  inviter    User      @relation("InvitedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([token])
+  @@index([status])
+  @@map("workspace_invitations")
+}
+
+// Workspace Members (Junction table for multi-workspace support)
+model WorkspaceMember {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  workspaceId Int      @map("workspace_id")
+  role        String   @default("member") @db.VarChar(50) // admin, member, viewer
+  joinedAt    DateTime @default(now()) @map("joined_at")
+
+  // Relations
+  user      User      @relation("UserMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([userId])
+  @@index([workspaceId])
+  @@map("workspace_members")
+}
+
+// Network Traffic Hourly Aggregates (for traffic pattern analysis)
+model NetworkTrafficHourly {
+  id            Int      @id @default(autoincrement())
+  serverId      Int      @map("server_id")
+  hourTimestamp DateTime @map("hour_timestamp")
+  avgInMbps     Decimal  @default(0) @map("avg_in_mbps") @db.Decimal(10, 2)
+  avgOutMbps    Decimal  @default(0) @map("avg_out_mbps") @db.Decimal(10, 2)
+  maxInMbps     Decimal  @default(0) @map("max_in_mbps") @db.Decimal(10, 2)
+  maxOutMbps    Decimal  @default(0) @map("max_out_mbps") @db.Decimal(10, 2)
+  minInMbps     Decimal  @default(0) @map("min_in_mbps") @db.Decimal(10, 2)
+  minOutMbps    Decimal  @default(0) @map("min_out_mbps") @db.Decimal(10, 2)
+  totalInMb     Decimal  @default(0) @map("total_in_mb") @db.Decimal(12, 2)
+  totalOutMb    Decimal  @default(0) @map("total_out_mb") @db.Decimal(12, 2)
+  samplesCount  Int      @default(0) @map("samples_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, hourTimestamp], name: "network_traffic_hourly_server_hour_unique")
+  @@index([serverId], name: "network_traffic_hourly_server_id_idx")
+  @@index([hourTimestamp(sort: Desc)], name: "network_traffic_hourly_timestamp_idx")
+  @@map("network_traffic_hourly")
 }

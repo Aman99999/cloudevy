@@ -45,6 +45,10 @@ echo "⬇️ Pulling downtime-scheduler image..."
 docker pull $REGISTRY/$NAMESPACE/cloudevy-downtime-scheduler:$SCHEDULER_TAG
 
 echo ""
+echo "⬇️ Pulling user-management image..."
+docker pull $REGISTRY/$NAMESPACE/cloudevy-user-management:latest
+
+echo ""
 echo "⬇️ Pulling database images..."
 docker pull postgres:15-alpine
 docker pull influxdb:2.7-alpine

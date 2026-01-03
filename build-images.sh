@@ -21,6 +21,10 @@ docker buildx build --platform linux/amd64 -t cloudevy-agent:latest --load ./age
 echo "🕐 Building downtime-scheduler for linux/amd64..."
 docker buildx build --platform linux/amd64 -f downtime-scheduler/Dockerfile -t cloudevy-downtime-scheduler:latest --load .
 
+# Build user-management for production (from root context to access backend/prisma)
+echo "👥 Building user-management for linux/amd64..."
+docker buildx build --platform linux/amd64 -f user-management/Dockerfile -t cloudevy-user-management:latest --load .
+
 echo ""
 echo "✅ All production images built successfully!"
 echo ""
@@ -29,6 +33,7 @@ echo "  - cloudevy-backend:latest"
 echo "  - cloudevy-frontend:latest"
 echo "  - cloudevy-agent:latest"
 echo "  - cloudevy-downtime-scheduler:latest"
+echo "  - cloudevy-user-management:latest"
 echo ""
 echo "📋 Next steps:"
 echo "  1. Push to Docker Hub: ./push-images.sh"

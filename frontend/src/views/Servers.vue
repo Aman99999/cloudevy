@@ -197,6 +197,30 @@
             </div>
           </div>
 
+          <!-- Traffic Pattern Badge (if available) -->
+          <div v-if="server.status === 'running' && server.trafficPattern" class="mb-4">
+            <div class="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                  <span class="text-lg">📊</span>
+                  <div>
+                    <p class="text-xs text-gray-400">Peak Traffic</p>
+                    <p class="text-sm font-semibold text-purple-400">{{ server.trafficPattern.peakTime }}</p>
+                  </div>
+                </div>
+                <div v-if="server.trafficPattern.trend" class="flex items-center space-x-1">
+                  <span :class="[
+                    'text-xs font-medium',
+                    server.trafficPattern.trend === 'increasing' ? 'text-yellow-400' : 'text-green-400'
+                  ]">
+                    {{ server.trafficPattern.trend === 'increasing' ? '↗️' : '↘️' }}
+                    {{ server.trafficPattern.trendPercent }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Server Details -->
           <div class="space-y-2">
             <div v-if="server.ipAddress" class="flex items-center justify-between p-2 bg-gray-900/50 rounded-lg">
@@ -243,11 +267,27 @@
       @close="confirmDialog.isOpen = false"
     />
 
-    <!-- Schedule Modal -->
+    <!-- Schedule Type Selection Modal -->
+    <ScheduleTypeSelectionModal
+      v-if="showScheduleTypeModal && selectedServer"
+      :server="selectedServer"
+      @close="showScheduleTypeModal = false"
+      @selectType="handleScheduleTypeSelected"
+    />
+
+    <!-- Schedule Downtime Modal -->
     <ScheduleModal
-      v-if="showScheduleModal"
+      v-if="showScheduleModal && selectedServer"
       :server="selectedServer"
       @close="showScheduleModal = false"
+      @saved="handleScheduleSaved"
+    />
+
+    <!-- Config Scaling Modal -->
+    <ConfigScalingModal
+      v-if="showConfigScalingModal && selectedServer"
+      :server="selectedServer"
+      @close="showConfigScalingModal = false"
       @saved="handleScheduleSaved"
     />
 
@@ -279,6 +319,8 @@ import AddServerModal from '@/components/AddServerModal.vue'
 import ServerDetailsModal from '@/components/ServerDetailsModal.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ScheduleModal from '@/components/ScheduleModal.vue'
+import ScheduleTypeSelectionModal from '@/components/ScheduleTypeSelectionModal.vue'
+import ConfigScalingModal from '@/components/ConfigScalingModal.vue'
 import ServerSchedulesModal from '@/components/ServerSchedulesModal.vue'
 import apiClient from '@/api/client'
 import { useToast } from '@/composables/useToast'
@@ -290,7 +332,9 @@ const loading = ref(false)
 const showAddServerModal = ref(false)
 const showDetailsModal = ref(false)
 const selectedServerId = ref(null)
+const showScheduleTypeModal = ref(false)
 const showScheduleModal = ref(false)
+const showConfigScalingModal = ref(false)
 const showSchedulesModal = ref(false)
 const selectedServer = ref(null)
 let metricsInterval = null
@@ -309,10 +353,27 @@ const confirmDialog = ref({
 })
 
 const serversWithMetrics = computed(() => {
-  return servers.value.map(server => ({
-    ...server,
-    metrics: serverMetrics.value[server.id] || null
-  }))
+  return servers.value.map(server => {
+    const metrics = serverMetrics.value[server.id]
+    
+    // Ensure metrics have the expected structure
+    const safeMetrics = metrics ? {
+      cpu: typeof metrics.cpu === 'number' ? metrics.cpu : 0,
+      memory: typeof metrics.memory === 'number' ? metrics.memory : 0,
+      disk: typeof metrics.disk === 'number' ? metrics.disk : 0,
+      status: metrics.status || 'offline'
+    } : {
+      cpu: 0,
+      memory: 0,
+      disk: 0,
+      status: 'offline'
+    }
+    
+    return {
+      ...server,
+      metrics: safeMetrics
+    }
+  })
 })
 
 const fetchServers = async () => {
@@ -541,7 +602,15 @@ const getUsageColor = (percentage) => {
 
 const openScheduleModal = (server) => {
   selectedServer.value = server
-  showScheduleModal.value = true
+  showScheduleTypeModal.value = true
+}
+
+const handleScheduleTypeSelected = (type) => {
+  if (type === 'downtime') {
+    showScheduleModal.value = true
+  } else if (type === 'scaling') {
+    showConfigScalingModal.value = true
+  }
 }
 
 const openSchedulesModal = (server) => {

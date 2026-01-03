@@ -175,7 +175,12 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const workspaceId = req.user.workspaceId;
-    const { serverId, name, action, rrule, timezone = 'UTC' } = req.body;
+    const { 
+      serverId, name, action, rrule, timezone = 'UTC', 
+      targetInstanceType, originalInstanceType,
+      targetVolumeSize, targetVolumeType, targetVolumeIops, targetVolumeThroughput,
+      originalVolumeSize, originalVolumeType, originalVolumeIops, originalVolumeThroughput
+    } = req.body;
 
     // Validate required fields
     if (!serverId || !name || !action || !rrule) {
@@ -186,11 +191,21 @@ router.post('/', async (req, res) => {
     }
 
     // Validate action
-    if (!['stop', 'start', 'reboot'].includes(action)) {
+    if (!['stop', 'start', 'reboot', 'scale_down', 'scale_up'].includes(action)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid action. Must be: stop, start, or reboot'
+        message: 'Invalid action. Must be: stop, start, reboot, scale_down, or scale_up'
       });
+    }
+
+    // Validate scaling actions have at least one target
+    if ((action === 'scale_down' || action === 'scale_up')) {
+      if (!targetInstanceType && !targetVolumeSize && !targetVolumeType && !targetVolumeIops && !targetVolumeThroughput) {
+        return res.status(400).json({
+          success: false,
+          message: 'At least one target configuration (instance type or volume) is required for scaling actions'
+        });
+      }
     }
 
     // Verify server belongs to workspace
@@ -232,7 +247,8 @@ router.post('/', async (req, res) => {
       const nowInUserTz = new Date(nowUTC.getTime() - userTzOffset);
       
       // Get next occurrence (interpreted as if in user's timezone)
-      const nextInUserTz = rule.after(nowInUserTz, true);
+      // Use false (exclusive) to get NEXT occurrence, not current time
+      const nextInUserTz = rule.after(nowInUserTz, false);
       
       if (!nextInUserTz) {
         return res.status(400).json({
@@ -263,23 +279,46 @@ router.post('/', async (req, res) => {
     }
 
     // Create schedule
+    const scheduleData = {
+      workspaceId,
+      serverId: parseInt(serverId),
+      name,
+      action,
+      rrule,
+      timezone,
+      nextRunAt,
+      enabled: true
+    };
+
+    // Add instance type fields for scaling actions
+    if (action === 'scale_down' || action === 'scale_up') {
+      if (targetInstanceType) {
+        scheduleData.targetInstanceType = targetInstanceType;
+      }
+      if (originalInstanceType) {
+        scheduleData.originalInstanceType = originalInstanceType;
+      }
+      
+      // Add volume fields if specified
+      if (targetVolumeSize) scheduleData.targetVolumeSize = parseInt(targetVolumeSize);
+      if (targetVolumeType) scheduleData.targetVolumeType = targetVolumeType;
+      if (targetVolumeIops) scheduleData.targetVolumeIops = parseInt(targetVolumeIops);
+      if (targetVolumeThroughput) scheduleData.targetVolumeThroughput = parseInt(targetVolumeThroughput);
+      if (originalVolumeSize) scheduleData.originalVolumeSize = parseInt(originalVolumeSize);
+      if (originalVolumeType) scheduleData.originalVolumeType = originalVolumeType;
+      if (originalVolumeIops) scheduleData.originalVolumeIops = parseInt(originalVolumeIops);
+      if (originalVolumeThroughput) scheduleData.originalVolumeThroughput = parseInt(originalVolumeThroughput);
+    }
+
     const schedule = await prisma.schedule.create({
-      data: {
-        workspaceId,
-        serverId: parseInt(serverId),
-        name,
-        action,
-        rrule,
-        timezone,
-        nextRunAt,
-        enabled: true
-      },
+      data: scheduleData,
       include: {
         server: {
           select: {
             id: true,
             name: true,
-            provider: true
+            provider: true,
+            instanceType: true
           }
         }
       }
@@ -308,7 +347,7 @@ router.put('/:id', async (req, res) => {
   try {
     const scheduleId = parseInt(req.params.id);
     const workspaceId = req.user.workspaceId;
-    const { name, action, rrule, timezone, enabled } = req.body;
+    const { name, action, rrule, timezone, enabled, targetInstanceType, originalInstanceType } = req.body;
 
     // Verify schedule belongs to workspace
     const existingSchedule = await prisma.schedule.findFirst({
@@ -330,16 +369,26 @@ router.put('/:id', async (req, res) => {
     
     if (name !== undefined) updateData.name = name;
     if (action !== undefined) {
-      if (!['stop', 'start', 'reboot'].includes(action)) {
+      if (!['stop', 'start', 'reboot', 'scale_down', 'scale_up'].includes(action)) {
         return res.status(400).json({
           success: false,
           message: 'Invalid action'
         });
       }
       updateData.action = action;
+      
+      // Validate instance type for scaling actions
+      if ((action === 'scale_down' || action === 'scale_up') && targetInstanceType === undefined && !existingSchedule.targetInstanceType) {
+        return res.status(400).json({
+          success: false,
+          message: 'targetInstanceType is required for scale_down and scale_up actions'
+        });
+      }
     }
     if (timezone !== undefined) updateData.timezone = timezone;
     if (enabled !== undefined) updateData.enabled = enabled;
+    if (targetInstanceType !== undefined) updateData.targetInstanceType = targetInstanceType;
+    if (originalInstanceType !== undefined) updateData.originalInstanceType = originalInstanceType;
 
     // If rrule changed, recalculate next run
     if (rrule !== undefined) {
@@ -353,7 +402,8 @@ router.put('/:id', async (req, res) => {
         // Get timezone offset and adjust calculation
         const userTzOffset = getTimezoneOffsetMs(scheduleTimezone, nowUTC);
         const nowInUserTz = new Date(nowUTC.getTime() - userTzOffset);
-        const nextInUserTz = rule.after(nowInUserTz, true);
+        // Use false (exclusive) to get NEXT occurrence
+        const nextInUserTz = rule.after(nowInUserTz, false);
         
         if (!nextInUserTz) {
           return res.status(400).json({
@@ -454,10 +504,10 @@ router.delete('/:id', async (req, res) => {
 });
 
 /**
- * POST /api/schedules/:id/toggle
+ * PUT /api/schedules/:id/toggle
  * Enable or disable a schedule
  */
-router.post('/:id/toggle', async (req, res) => {
+router.put('/:id/toggle', async (req, res) => {
   try {
     const scheduleId = parseInt(req.params.id);
     const workspaceId = req.user.workspaceId;

@@ -2,18 +2,14 @@
 
 set -e
 
-echo "🛑 Stopping existing containers..."
-docker-compose down
 
 echo "🐳 Rebuilding Docker Images"
 
 # Build frontend
-echo "🎨 Building frontend..."
-docker-compose build frontend
+echo "🎨 Building frontend for linux/amd64..."
+docker buildx build --platform linux/amd64 -t cloudevy-frontend:latest --load ./frontend
 
 # Start containers
-echo "🚀 Starting all containers..."
-docker-compose up -d
 
 echo "✅ All images built and containers started successfully"
 echo ""

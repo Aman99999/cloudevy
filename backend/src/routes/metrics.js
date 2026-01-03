@@ -11,6 +11,80 @@ const router = express.Router();
 const metricsCache = new Map();
 
 /**
+ * Aggregate and store hourly network traffic
+ */
+async function aggregateHourlyTraffic(serverId, metrics) {
+  try {
+    // Only aggregate if network metrics object exists (values can be 0)
+    if (!metrics.network) {
+      return;
+    }
+
+    // Get current hour timestamp (rounded to hour)
+    const now = new Date();
+    const hourTimestamp = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
+
+    // Convert to Mbps (agent already sends in MB/s)
+    const inMbps = metrics.network.inbound || 0;
+    const outMbps = metrics.network.outbound || 0;
+
+    // Try to get existing hourly record
+    const existing = await prisma.networkTrafficHourly.findUnique({
+      where: {
+        network_traffic_hourly_server_hour_unique: {
+          serverId: serverId,
+          hourTimestamp: hourTimestamp
+        }
+      }
+    });
+
+    if (existing) {
+      // Update existing record with new sample
+      const newSamplesCount = existing.samplesCount + 1;
+      const newAvgIn = ((parseFloat(existing.avgInMbps) * existing.samplesCount) + inMbps) / newSamplesCount;
+      const newAvgOut = ((parseFloat(existing.avgOutMbps) * existing.samplesCount) + outMbps) / newSamplesCount;
+
+      await prisma.networkTrafficHourly.update({
+        where: {
+          id: existing.id
+        },
+        data: {
+          avgInMbps: newAvgIn,
+          avgOutMbps: newAvgOut,
+          maxInMbps: Math.max(parseFloat(existing.maxInMbps), inMbps),
+          maxOutMbps: Math.max(parseFloat(existing.maxOutMbps), outMbps),
+          minInMbps: Math.min(parseFloat(existing.minInMbps), inMbps),
+          minOutMbps: Math.min(parseFloat(existing.minOutMbps), outMbps),
+          totalInMb: parseFloat(existing.totalInMb) + (inMbps / 12), // Assuming 5-second reporting (12 reports per minute)
+          totalOutMb: parseFloat(existing.totalOutMb) + (outMbps / 12),
+          samplesCount: newSamplesCount
+        }
+      });
+    } else {
+      // Create new hourly record
+      await prisma.networkTrafficHourly.create({
+        data: {
+          serverId: serverId,
+          hourTimestamp: hourTimestamp,
+          avgInMbps: inMbps,
+          avgOutMbps: outMbps,
+          maxInMbps: inMbps,
+          maxOutMbps: outMbps,
+          minInMbps: inMbps,
+          minOutMbps: outMbps,
+          totalInMb: inMbps / 12,
+          totalOutMb: outMbps / 12,
+          samplesCount: 1
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Hourly traffic aggregation error:', error);
+    throw error;
+  }
+}
+
+/**
  * Decrypt credentials
  */
 function decryptCredentials(encryptedData) {
@@ -141,13 +215,13 @@ router.post('/report', authenticateAgent, async (req, res) => {
       // Don't fail the request if DB update fails
     }
     
-    // TODO: Store in InfluxDB for historical data
-    // await influxDB.writePoints([{
-    //   measurement: 'server_metrics',
-    //   tags: { serverId },
-    //   fields: metrics,
-    //   timestamp: new Date()
-    // }]);
+    // Aggregate and store hourly network traffic
+    try {
+      await aggregateHourlyTraffic(serverId, metrics);
+    } catch (aggError) {
+      console.error('❌ Failed to aggregate hourly traffic:', aggError);
+      // Don't fail the request if aggregation fails
+    }
     
     res.json({
       success: true,
@@ -197,7 +271,17 @@ router.get('/server/:serverId', async (req, res) => {
     // Try to get real metrics from cache first
     let metrics = metricsCache.get(serverId);
     
-    if (metrics) {
+    // If server is not running, show offline immediately (don't use cached data)
+    if (server.status !== 'running' && server.status !== 'provisioning') {
+      metrics = {
+        status: 'offline',
+        message: 'Machine not connected. Install the monitoring agent to see metrics.',
+        cpu: { usage: 0, cores: 0 },
+        memory: { used: 0, total: 0 },
+        disk: { used: 0, total: 0 },
+        network: { in: 0, out: 0 }
+      };
+    } else if (metrics) {
       // Check if metrics are fresh (less than 30 seconds old)
       const age = Date.now() - new Date(metrics.receivedAt).getTime();
       if (age > 30000) {
@@ -209,22 +293,15 @@ router.get('/server/:serverId', async (req, res) => {
         };
       }
     } else {
-      // No real metrics available, try cloud provider or use mock
-      try {
-        if (server.provider === 'aws' && server.instanceId) {
-          metrics = await fetchAWSMetrics(server);
-        } else if (server.provider === 'azure') {
-          metrics = await fetchAzureMetrics(server);
-        } else if (server.provider === 'gcp') {
-          metrics = await fetchGCPMetrics(server);
-        } else {
-          // Using mock metrics (no console.log to reduce noise)
-          metrics = generateMockMetrics(server);
-        }
-      } catch (error) {
-        console.error(`Failed to fetch cloud metrics for server ${serverId}:`, error.message);
-        metrics = generateMockMetrics(server);
-      }
+      // No agent data - return offline status, no mock data
+      metrics = {
+        status: 'offline',
+        message: 'Machine not connected. Install the monitoring agent to see metrics.',
+        cpu: { usage: 0, cores: 0 },
+        memory: { used: 0, total: 0 },
+        disk: { used: 0, total: 0 },
+        network: { in: 0, out: 0 }
+      };
     }
 
     res.json({
@@ -233,8 +310,7 @@ router.get('/server/:serverId', async (req, res) => {
         serverId: server.id,
         serverName: server.name,
         metrics,
-        source: metrics.status === 'online' && metricsCache.has(serverId) ? 'agent' : 
-                (metrics.source === 'cloudwatch' ? 'cloudwatch' : 'mock'),
+        source: metricsCache.has(serverId) ? 'agent' : 'none',
         hasAgent: metricsCache.has(serverId)
       }
     });
@@ -336,19 +412,30 @@ router.get('/servers/summary', async (req, res) => {
             disk: cachedMetrics.disk.percentage
           };
         } else {
-          // Stale data
-          metrics = generateQuickMetrics(server);
+          // Stale data - show as offline
+          metrics = {
+            status: 'offline',
+            cpu: 0,
+            memory: 0,
+            disk: 0
+          };
         }
       } else {
-        // No agent data, use mock (fast, deterministic)
-        metrics = generateQuickMetrics(server);
+        // No agent data - show as offline
+        metrics = {
+          status: 'offline',
+          cpu: 0,
+          memory: 0,
+          disk: 0
+        };
       }
       
       return {
         serverId: server.id,
         serverName: server.name,
         status: server.status,
-        metrics
+        metrics,
+        hasAgent: cachedMetrics && (Date.now() - new Date(cachedMetrics.receivedAt).getTime() < 30000)
       };
     });
 

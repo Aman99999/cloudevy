@@ -2,24 +2,16 @@
 
 set -e
 
-echo "🛑 Stopping existing containers..."
-docker-compose down
-
-echo "🐳 Rebuilding Docker Images"
+echo "🐳 Rebuilding Backend Image (linux/amd64)"
 
 # Build backend
 echo "🔧 Building backend..."
-docker-compose build backend
+docker buildx build --platform linux/amd64 -t cloudevy-backend:latest --load ./backend
 
-
-# Start containers
-echo "🚀 Starting all containers..."
-docker-compose up -
-
-echo "✅ All images built and containers started successfully"
 echo ""
-echo "Access:"
-echo "  Frontend: http://localhost:8001"
-echo "  Backend:  http://localhost:8002"
-
-
+echo "✅ Backend image built successfully"
+echo ""
+echo "📋 Next steps:"
+echo "  1. Push to Docker Hub: ./push-backend.sh"
+echo "  2. Or start locally: docker-compose up -d backend"
+echo ""

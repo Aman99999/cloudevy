@@ -130,6 +130,39 @@
                 </div>
               </button>
               <button
+                @click="activeTab = 'costs'"
+                :class="[
+                  'py-4 px-1 border-b-2 font-medium text-sm transition relative',
+                  activeTab === 'costs'
+                    ? 'border-indigo-500 text-indigo-400'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
+                ]"
+              >
+                <div class="flex items-center space-x-2">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Costs</span>
+                </div>
+              </button>
+              <button
+                @click="activeTab = 'traffic'"
+                :class="[
+                  'py-4 px-1 border-b-2 font-medium text-sm transition relative',
+                  activeTab === 'traffic'
+                    ? 'border-indigo-500 text-indigo-400'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
+                ]"
+              >
+                <div class="flex items-center space-x-2">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                  <span>Traffic Insights</span>
+                  <span class="px-1.5 py-0.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-[10px] font-bold rounded uppercase">New</span>
+                </div>
+              </button>
+              <button
                 @click="activeTab = 'agent'"
                 :class="[
                   'py-4 px-1 border-b-2 font-medium text-sm transition relative',
@@ -186,17 +219,23 @@
                 </div>
               </div>
 
-              <!-- Data Source Badge -->
-              <div v-if="dataSource !== 'agent'" class="flex items-center justify-center">
-                <div class="inline-flex items-center space-x-2 px-4 py-2 bg-gray-800/50 border border-gray-700 rounded-full">
-                  <div class="w-2 h-2 bg-gray-500 rounded-full"></div>
-                  <span class="text-xs text-gray-400 font-medium">
-                    {{ dataSource === 'cloudwatch' ? '📊 Showing CloudWatch Data (5-15 min delay)' : '🎭 Showing Demo Data' }}
-                  </span>
-                </div>
+              <!-- Machine Not Connected Message -->
+              <div v-if="metrics.status === 'offline'" class="bg-red-500/10 border-2 border-red-500/30 rounded-xl p-8 text-center">
+                <svg class="w-16 h-16 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414"></path>
+                </svg>
+                <h3 class="text-xl font-bold text-red-400 mb-2">Machine Not Connected</h3>
+                <p class="text-gray-400 mb-4">{{ metrics.message || 'Install the monitoring agent to see real-time metrics.' }}</p>
+                <button
+                  v-if="!hasAgent"
+                  @click="activeTab = 'agent'"
+                  class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
+                >
+                  Install Agent
+                </button>
               </div>
-              <!-- Current Metrics Grid -->
-              <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+
+              <div v-else class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <!-- CPU Card -->
                 <div class="bg-gradient-to-br from-gray-900/50 to-gray-800/50 border border-gray-700/50 rounded-xl p-4">
                   <div class="flex items-center justify-between mb-2">
@@ -263,28 +302,30 @@
                 </div>
               </div>
 
-              <!-- Time Range Selector -->
-              <div class="flex items-center justify-between">
-                <h3 class="text-lg font-bold text-white">Historical Metrics</h3>
-                <div class="flex items-center space-x-2">
-                  <button
-                    v-for="range in timeRanges"
-                    :key="range.value"
-                    @click="selectedTimeRange = range.value"
-                    :class="[
-                      'px-4 py-2 rounded-lg text-sm font-medium transition-all',
-                      selectedTimeRange === range.value
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700'
-                    ]"
-                  >
-                    {{ range.label }}
-                  </button>
+              <!-- All metrics content - hidden when offline -->
+              <div v-if="metrics.status !== 'offline'">
+                <!-- Time Range Selector -->
+                <div class="flex items-center justify-between mb-6">
+                  <h3 class="text-lg font-bold text-white">Historical Metrics</h3>
+                  <div class="flex items-center space-x-2">
+                    <button
+                      v-for="range in timeRanges"
+                      :key="range.value"
+                      @click="selectedTimeRange = range.value"
+                      :class="[
+                        'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                        selectedTimeRange === range.value
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700'
+                      ]"
+                    >
+                      {{ range.label }}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <!-- Charts -->
-              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <!-- CPU Chart -->
                 <div class="bg-gradient-to-br from-gray-900/50 to-gray-800/50 border border-gray-700/50 rounded-xl p-6">
                   <h4 class="text-base font-semibold text-white mb-4">CPU Usage Over Time</h4>
@@ -418,11 +459,739 @@
                 <div class="bg-gradient-to-br from-gray-900/50 to-gray-800/50 border border-gray-700/50 rounded-xl p-4">
                   <div class="flex items-center justify-between">
                     <span class="text-sm text-gray-400">Load Average</span>
-                    <span class="text-base font-semibold text-white font-mono">{{ metrics.loadAverage.join(', ') }}</span>
+                    <span class="text-base font-semibold text-white font-mono">{{ metrics.loadAverage ? metrics.loadAverage.join(', ') : '0, 0, 0' }}</span>
                   </div>
                 </div>
               </div>
+              </div>
+
             </div>
+
+            <!-- Costs Tab -->
+            <div v-else-if="activeTab === 'costs'" class="space-y-6">
+              
+              <!-- Cost Tracking Disabled -->
+              <div v-if="costTrackingDisabled" class="text-center py-12">
+                <div class="w-20 h-20 bg-gray-700/50 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                  </svg>
+                </div>
+                <h3 class="text-xl font-bold text-white mb-3">Cost Tracking Disabled</h3>
+                <p class="text-gray-400 mb-6">
+                  Cost tracking is currently disabled. AWS Cost Explorer API costs $0.01 per request.
+                </p>
+                <button
+                  @click="enableCostTracking"
+                  class="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors"
+                >
+                  Enable Cost Tracking
+                </button>
+              </div>
+              
+              <!-- Loading State -->
+              <div v-else-if="loadingCosts" class="flex items-center justify-center py-20">
+                <svg class="animate-spin h-10 w-10 text-blue-500" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+
+              <!-- Data Not Available -->
+              <div v-else-if="!costDataAvailable" class="space-y-6">
+                
+                <!-- Error Banner -->
+                <div class="bg-gradient-to-br from-red-500/10 to-orange-500/10 border-2 border-red-500/30 rounded-2xl p-8 text-center">
+                  <div class="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <svg class="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <h3 class="text-2xl font-bold text-white mb-3">Cost Data Not Available</h3>
+                  <p class="text-gray-300 mb-6">
+                    {{ costErrorMessage || 'AWS Cost Explorer is not enabled or IAM permissions are missing.' }}
+                  </p>
+                </div>
+
+                <!-- Setup Instructions -->
+                <div class="bg-gray-900/50 border border-gray-800 rounded-2xl p-6">
+                  <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
+                    <svg class="w-5 h-5 text-indigo-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    How to Enable Cost Tracking
+                  </h3>
+
+                  <div class="space-y-6">
+                    <!-- Step 1 -->
+                    <div>
+                      <div class="flex items-start space-x-3 mb-3">
+                        <div class="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center flex-shrink-0 text-indigo-400 font-bold">
+                          1
+                        </div>
+                        <div class="flex-1">
+                          <h4 class="text-white font-semibold mb-2">Enable AWS Cost Explorer</h4>
+                          <ol class="text-sm text-gray-300 space-y-1 list-disc list-inside">
+                            <li>Go to AWS Console → Billing Dashboard</li>
+                            <li>Navigate to "Cost Explorer"</li>
+                            <li>Click "Enable Cost Explorer" (free to enable)</li>
+                            <li>Wait 24 hours for initial data to populate</li>
+                          </ol>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Step 2 -->
+                    <div>
+                      <div class="flex items-start space-x-3 mb-3">
+                        <div class="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center flex-shrink-0 text-indigo-400 font-bold">
+                          2
+                        </div>
+                        <div class="flex-1">
+                          <h4 class="text-white font-semibold mb-2">Enable Cost Allocation Tags (Required for Per-Instance Costs)</h4>
+                          <div class="space-y-3">
+                            <p class="text-sm text-gray-300">
+                              <strong>Without this step, you'll see costs for ALL EC2 instances combined, not individual servers.</strong>
+                            </p>
+                            
+                            <!-- Substeps -->
+                            <div class="bg-gray-900/50 rounded-lg p-4 space-y-3">
+                              <div class="flex items-start space-x-2">
+                                <span class="text-indigo-400 font-mono text-xs bg-indigo-500/10 px-2 py-1 rounded">2.1</span>
+                                <div class="flex-1">
+                                  <p class="text-sm text-gray-300">Open AWS Console and navigate to:</p>
+                                  <code class="text-xs text-green-400 block mt-1 bg-gray-950/50 px-2 py-1 rounded">
+                                    Billing and Cost Management → Cost Allocation Tags
+                                  </code>
+                                </div>
+                              </div>
+                              
+                              <div class="flex items-start space-x-2">
+                                <span class="text-indigo-400 font-mono text-xs bg-indigo-500/10 px-2 py-1 rounded">2.2</span>
+                                <div class="flex-1">
+                                  <p class="text-sm text-gray-300">Click on the <strong>"User-defined cost allocation tags"</strong> tab</p>
+                                </div>
+                              </div>
+                              
+                              <div class="flex items-start space-x-2">
+                                <span class="text-indigo-400 font-mono text-xs bg-indigo-500/10 px-2 py-1 rounded">2.3</span>
+                                <div class="flex-1">
+                                  <p class="text-sm text-gray-300 mb-2">Use the search box and search for:</p>
+                                  <code class="text-xs text-yellow-400 block bg-gray-950/50 px-2 py-1 rounded">
+                                    Name
+                                  </code>
+                                  <p class="text-xs text-gray-400 mt-1">
+                                    (This tag contains the server name you set in AWS)
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <div class="flex items-start space-x-2">
+                                <span class="text-indigo-400 font-mono text-xs bg-indigo-500/10 px-2 py-1 rounded">2.4</span>
+                                <div class="flex-1">
+                                  <p class="text-sm text-gray-300">Check the checkbox next to <strong>Name</strong></p>
+                                </div>
+                              </div>
+                              
+                              <div class="flex items-start space-x-2">
+                                <span class="text-indigo-400 font-mono text-xs bg-indigo-500/10 px-2 py-1 rounded">2.5</span>
+                                <div class="flex-1">
+                                  <p class="text-sm text-gray-300">Click the <strong>"Activate"</strong> button at the top</p>
+                                </div>
+                              </div>
+                              
+                              <div class="flex items-start space-x-2">
+                                <span class="text-indigo-400 font-mono text-xs bg-indigo-500/10 px-2 py-1 rounded">2.6</span>
+                                <div class="flex-1">
+                                  <p class="text-sm text-gray-300">
+                                    <strong>⏰ Wait 24 hours</strong> for the tag to become active and for cost data to populate
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <!-- Important Note -->
+                            <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                              <div class="flex items-start space-x-2">
+                                <svg class="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <div class="text-xs text-yellow-300">
+                                  <strong>Important:</strong> After activation, AWS needs 24 hours to start tracking costs by instance. 
+                                  Cost data will appear in CloudEvy the next day after the waiting period.
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <!-- Visual Aid -->
+                            <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                              <div class="flex items-start space-x-2">
+                                <svg class="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div class="text-xs text-blue-300">
+                                  <strong>What you'll see after enabling:</strong><br>
+                                  Before: "Costs for ALL EC2 instances: $50.00"<br>
+                                  After: "Costs for instance {{ serverDetails?.instanceId || 'i-xxx' }}: $5.00"
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Step 3: Add IAM Permissions -->
+                    <div>
+                      <div class="flex items-start space-x-3 mb-3">
+                        <div class="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center flex-shrink-0 text-indigo-400 font-bold">
+                          2
+                        </div>
+                        <div class="flex-1">
+                          <h4 class="text-white font-semibold mb-2">Add IAM Permissions</h4>
+                          <p class="text-sm text-gray-300 mb-2">Attach this policy to your IAM user/role:</p>
+                          <div class="bg-gray-950/50 border border-gray-800 rounded-lg px-4 py-3 relative group">
+                            <pre class="text-xs text-green-400 font-mono overflow-x-auto"><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ce:GetCostAndUsage",
+        "ce:GetCostForecast"
+      ],
+      "Resource": "*"
+    }
+  ]
+}</code></pre>
+                            <button
+                              @click="copyIAMPolicy"
+                              class="absolute right-2 top-2 px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded text-xs transition"
+                            >
+                              {{ iamPolicyCopied ? 'Copied!' : 'Copy' }}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div>
+                      <div class="flex items-start space-x-3">
+                        <div class="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center flex-shrink-0 text-indigo-400 font-bold">
+                          4
+                        </div>
+                        <div class="flex-1">
+                          <h4 class="text-white font-semibold mb-2">Refresh & Try Again</h4>
+                          <p class="text-sm text-gray-300 mb-3">
+                            After completing all steps above, retry to fetch cost data.
+                          </p>
+                          <div class="flex items-center space-x-3">
+                            <button
+                              @click="retryFetchCosts"
+                              class="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium transition-colors"
+                            >
+                              Retry Now
+                            </button>
+                            <button
+                              @click="disableCostTracking"
+                              class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors"
+                            >
+                              Disable Cost Tracking
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Additional Info -->
+                <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                  <div class="flex items-start space-x-3">
+                    <svg class="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div class="text-sm text-blue-300">
+                      <strong>Note:</strong> AWS Cost Explorer is free to enable, but API calls cost $0.01 per request. 
+                      CloudEvy caches cost data to minimize API usage.
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- Cost Overview (Real Data) -->
+              <div v-else class="space-y-6">
+                
+                <!-- Header with Disable Button -->
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="text-lg font-semibold text-white">Cost Analytics</h3>
+                    <p class="text-sm text-gray-400 mt-1">AWS Cost Explorer data for this server</p>
+                  </div>
+                  <button
+                    @click="disableCostTracking"
+                    class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                    </svg>
+                    <span>Disable Cost Tracking</span>
+                  </button>
+                </div>
+
+                <!-- Setup Instructions (Collapsible) -->
+                <div class="bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden">
+                  <button
+                    @click="showCostInstructions = !showCostInstructions"
+                    class="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-900/70 transition-colors"
+                  >
+                    <div class="flex items-center space-x-3">
+                      <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div class="text-left">
+                        <h4 class="text-white font-semibold">Setup Instructions</h4>
+                        <p class="text-xs text-gray-400">How to enable per-instance cost tracking</p>
+                      </div>
+                    </div>
+                    <svg 
+                      :class="['w-5 h-5 text-gray-400 transition-transform', showCostInstructions ? 'rotate-180' : '']" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  <div v-if="showCostInstructions" class="px-6 pb-6 space-y-6">
+                    
+                    <!-- Step 1: Enable Cost Explorer -->
+                    <div>
+                      <div class="flex items-start space-x-3 mb-3">
+                        <div class="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center flex-shrink-0 text-indigo-400 font-bold">
+                          1
+                        </div>
+                        <div class="flex-1">
+                          <h4 class="text-white font-semibold mb-2">Enable AWS Cost Explorer</h4>
+                          <ol class="text-sm text-gray-300 space-y-1 list-disc list-inside">
+                            <li>Go to AWS Console → Billing Dashboard</li>
+                            <li>Navigate to "Cost Explorer"</li>
+                            <li>Click "Enable Cost Explorer" (free to enable)</li>
+                            <li>Wait 24 hours for initial data to populate</li>
+                          </ol>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Step 2: Enable Cost Allocation Tags -->
+                    <div>
+                      <div class="flex items-start space-x-3 mb-3">
+                        <div class="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center flex-shrink-0 text-indigo-400 font-bold">
+                          2
+                        </div>
+                        <div class="flex-1">
+                          <h4 class="text-white font-semibold mb-2">Enable Cost Allocation Tags (Required for Per-Instance Costs)</h4>
+                          <div class="space-y-3">
+                            <p class="text-sm text-gray-300">
+                              <strong>Without this step, you'll see costs for ALL EC2 instances combined, not individual servers.</strong>
+                            </p>
+                            
+                            <!-- Substeps -->
+                            <div class="bg-gray-900/50 rounded-lg p-4 space-y-3">
+                              <div class="flex items-start space-x-2">
+                                <span class="text-indigo-400 font-mono text-xs bg-indigo-500/10 px-2 py-1 rounded">2.1</span>
+                                <div class="flex-1">
+                                  <p class="text-sm text-gray-300 mb-2">Open AWS Console and navigate to <strong>Billing Dashboard</strong>:</p>
+                                  <div class="space-y-2">
+                                    <div class="bg-gray-950/50 rounded px-3 py-2">
+                                      <p class="text-xs text-gray-400 mb-1">Option A: Direct URL</p>
+                                      <code class="text-xs text-green-400 block">
+                                        https://console.aws.amazon.com/billing/home#/tags
+                                      </code>
+                                    </div>
+                                    <div class="bg-gray-950/50 rounded px-3 py-2">
+                                      <p class="text-xs text-gray-400 mb-1">Option B: From Console</p>
+                                      <div class="text-xs text-green-400 space-y-1">
+                                        <div>1. Click your <strong>account name</strong> (top right)</div>
+                                        <div>2. Select <strong>"Billing and Cost Management"</strong></div>
+                                        <div>3. In left sidebar, find <strong>"Cost allocation tags"</strong></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div class="flex items-start space-x-2">
+                                <span class="text-indigo-400 font-mono text-xs bg-indigo-500/10 px-2 py-1 rounded">2.2</span>
+                                <div class="flex-1">
+                                  <p class="text-sm text-gray-300 mb-2">You'll see TWO tabs at the top. Click on:</p>
+                                  <div class="bg-indigo-500/10 border border-indigo-500/30 rounded px-3 py-2">
+                                    <p class="text-sm text-indigo-300 font-semibold">
+                                      📌 "AWS-generated cost allocation tags"
+                                    </p>
+                                    <p class="text-xs text-gray-400 mt-1">(NOT "User-defined" - use the AWS-generated tab)</p>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div class="flex items-start space-x-2">
+                                <span class="text-indigo-400 font-mono text-xs bg-indigo-500/10 px-2 py-1 rounded">2.3</span>
+                                <div class="flex-1">
+                                  <p class="text-sm text-gray-300 mb-2">In the search/filter box, type:</p>
+                                  <div class="bg-gray-950/50 border border-gray-800 rounded-lg px-4 py-3">
+                                    <code class="text-base text-yellow-400 font-bold">Name</code>
+                                  </div>
+                                  <div class="mt-3 space-y-2">
+                                    <div class="bg-red-500/10 border border-red-500/30 rounded px-3 py-2">
+                                      <p class="text-xs text-red-300">
+                                        <strong>⚠️ Tag Not Showing?</strong> This is normal if you've never enabled it before. Try these:
+                                      </p>
+                                      <ul class="text-xs text-gray-400 mt-2 space-y-1 list-disc list-inside">
+                                        <li>Clear the search box and scroll through ALL tags</li>
+                                        <li>Ensure you're in "User-defined tags" tab</li>
+                                        <li>Make sure your EC2 instance has a "Name" tag in AWS console</li>
+                                        <li>If still not visible, try refreshing the page</li>
+                                      </ul>
+                                    </div>
+                                    <p class="text-xs text-gray-400">
+                                      <strong>What it looks like:</strong> A row in the table with tag name "Name" and a checkbox on the left
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div class="flex items-start space-x-2">
+                                <span class="text-indigo-400 font-mono text-xs bg-indigo-500/10 px-2 py-1 rounded">2.4</span>
+                                <div class="flex-1">
+                                  <p class="text-sm text-gray-300 mb-2">
+                                    <strong>Check the checkbox</strong> in the leftmost column next to "Name"
+                                  </p>
+                                  <div class="bg-gray-950/50 rounded px-3 py-2">
+                                    <p class="text-xs text-gray-400">
+                                      The row should highlight when selected (usually turns blue/darker)
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div class="flex items-start space-x-2">
+                                <span class="text-indigo-400 font-mono text-xs bg-indigo-500/10 px-2 py-1 rounded">2.5</span>
+                                <div class="flex-1">
+                                  <p class="text-sm text-gray-300 mb-2">
+                                    Click the <strong>"Activate"</strong> button (usually at top-right of the table)
+                                  </p>
+                                  <div class="bg-green-500/10 border border-green-500/30 rounded px-3 py-2">
+                                    <p class="text-xs text-green-300">
+                                      ✅ You'll see a success message: "Tag activation is processing"
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div class="flex items-start space-x-2">
+                                <span class="text-indigo-400 font-mono text-xs bg-indigo-500/10 px-2 py-1 rounded">2.6</span>
+                                <div class="flex-1">
+                                  <p class="text-sm text-gray-300 mb-2">
+                                    <strong>⏰ Wait 24 hours</strong> for the tag to become active
+                                  </p>
+                                  <div class="bg-yellow-500/10 border border-yellow-500/30 rounded px-3 py-2 space-y-1">
+                                    <p class="text-xs text-yellow-300">
+                                      <strong>During this time:</strong>
+                                    </p>
+                                    <ul class="text-xs text-gray-400 space-y-1 list-disc list-inside">
+                                      <li>AWS activates the tag across your account</li>
+                                      <li>Cost data starts being tracked per instance</li>
+                                      <li>CloudEvy will show "ALL EC2 costs" until this completes</li>
+                                    </ul>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <!-- Important Note -->
+                            <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                              <div class="flex items-start space-x-2">
+                                <svg class="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <div class="text-xs text-yellow-300">
+                                  <strong>Important:</strong> After activation, AWS needs 24 hours to start tracking costs by instance. 
+                                  Cost data will appear in CloudEvy the next day after the waiting period.
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <!-- Visual Aid -->
+                            <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                              <div class="flex items-start space-x-2">
+                                <svg class="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div class="text-xs text-blue-300">
+                                  <strong>What you'll see after enabling:</strong><br>
+                                  Before: "Costs for ALL EC2 instances: $50.00"<br>
+                                  After: "Costs for instance {{ serverDetails?.instanceId || 'i-xxx' }}: $5.00"
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Step 3: Add IAM Permissions -->
+                    <div>
+                      <div class="flex items-start space-x-3 mb-3">
+                        <div class="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center flex-shrink-0 text-indigo-400 font-bold">
+                          3
+                        </div>
+                        <div class="flex-1">
+                          <h4 class="text-white font-semibold mb-2">Add IAM Permissions</h4>
+                          <p class="text-sm text-gray-300 mb-2">Attach this policy to your IAM user/role:</p>
+                          <div class="bg-gray-950/50 border border-gray-800 rounded-lg px-4 py-3 relative group">
+                            <pre class="text-xs text-green-400 font-mono overflow-x-auto"><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ce:GetCostAndUsage",
+        "ce:GetCostForecast"
+      ],
+      "Resource": "*"
+    }
+  ]
+}</code></pre>
+                            <button
+                              @click="copyIAMPolicy"
+                              class="absolute right-2 top-2 px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded text-xs transition"
+                            >
+                              {{ iamPolicyCopied ? 'Copied!' : 'Copy' }}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+                
+                <!-- Cache Info Banner -->
+                <div v-if="costDataCached" class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-start space-x-3">
+                      <svg class="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div class="text-sm text-blue-300">
+                        <strong>Cached Data:</strong> Showing cached cost data to reduce AWS API costs ($0.01 per request). Data refreshes every 24 hours (matches AWS billing data update frequency).
+                      </div>
+                    </div>
+                    <button
+                      @click="refreshCostData"
+                      :disabled="loadingCosts"
+                      class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/50 text-white rounded-lg text-xs font-medium transition-colors flex items-center space-x-1"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- API Usage Stats -->
+                <div v-if="!costTrackingDisabled" class="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-xl p-4">
+                  <div class="flex items-start justify-between">
+                    <div class="flex items-start space-x-3 flex-1">
+                      <svg class="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                      <div>
+                        <p class="text-sm font-semibold text-green-400 mb-2">Cost Explorer API Usage (Last 30 Days)</p>
+                        <div v-if="apiStats" class="grid grid-cols-3 gap-4 text-xs">
+                          <div>
+                            <p class="text-gray-400">API Calls</p>
+                            <p class="text-white font-bold text-lg">{{ apiStats.totalCalls }}</p>
+                          </div>
+                          <div>
+                            <p class="text-gray-400">Total Cost</p>
+                            <p class="text-white font-bold text-lg">${{ apiStats.totalCost }}</p>
+                          </div>
+                          <div>
+                            <p class="text-gray-400">Cache Efficiency</p>
+                            <p class="text-green-400 font-bold text-lg">{{ apiStats.cacheHitRate }}%</p>
+                          </div>
+                        </div>
+                        <div v-else class="text-xs text-gray-400">
+                          Loading API usage statistics...
+                        </div>
+                        <p v-if="apiStats && apiStats.lastCall" class="text-xs text-gray-500 mt-2">
+                          Last API call: {{ new Date(apiStats.lastCall).toLocaleString() }}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Monthly Cost Summary -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <!-- Current Month -->
+                  <div class="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-3">
+                      <span class="text-gray-400 text-sm font-medium">Current Month</span>
+                      <div :class="[
+                        'px-2 py-1 rounded-full text-xs font-semibold',
+                        costData.trend === 'increasing' ? 'bg-red-500/20 text-red-400' :
+                        costData.trend === 'decreasing' ? 'bg-green-500/20 text-green-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      ]">
+                        {{ costData.trend === 'increasing' ? '↑' : costData.trend === 'decreasing' ? '↓' : '→' }} {{ costData.trend }}
+                      </div>
+                    </div>
+                    <div class="text-3xl font-bold text-white mb-1">
+                      ${{ costData.currentMonth }}
+                    </div>
+                    <p class="text-xs text-gray-400">Month-to-date spend</p>
+                  </div>
+
+                  <!-- Last Month -->
+                  <div class="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/30 rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-3">
+                      <span class="text-gray-400 text-sm font-medium">Last Month</span>
+                    </div>
+                    <div class="text-3xl font-bold text-white mb-1">
+                      ${{ costData.lastMonth }}
+                    </div>
+                    <p class="text-xs text-gray-400">Previous month total</p>
+                  </div>
+
+                  <!-- Daily Average -->
+                  <div class="bg-gradient-to-br from-emerald-500/10 to-teal-500/10 border border-emerald-500/30 rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-3">
+                      <span class="text-gray-400 text-sm font-medium">Daily Average</span>
+                    </div>
+                    <div class="text-3xl font-bold text-white mb-1">
+                      ${{ (parseFloat(costData.currentMonth) / 30).toFixed(2) }}
+                    </div>
+                    <p class="text-xs text-gray-400">Avg cost per day</p>
+                  </div>
+                </div>
+
+                <!-- Cost Trend Chart -->
+                <div class="bg-gray-900/50 border border-gray-800 rounded-2xl p-6">
+                  <h3 class="text-lg font-semibold text-white mb-4">Daily Cost Trend (Last 30 Days)</h3>
+                  <div class="h-64">
+                    <Line :data="costChartData" :options="costChartOptions" />
+                  </div>
+                </div>
+
+                <!-- Cost Breakdown -->
+                <div class="bg-gray-900/50 border border-gray-800 rounded-2xl p-6">
+                  <h3 class="text-lg font-semibold text-white mb-4">Cost Breakdown</h3>
+                  <div class="space-y-3">
+                    <!-- Compute -->
+                    <div>
+                      <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                          <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                          <span class="text-gray-300 text-sm">Compute (EC2)</span>
+                        </div>
+                        <span class="text-white font-semibold">${{ costData.breakdown.compute }}</span>
+                      </div>
+                      <div class="w-full bg-gray-800 rounded-full h-2">
+                        <div class="bg-blue-500 h-2 rounded-full" :style="{ width: (parseFloat(costData.breakdown.compute) / parseFloat(costData.currentMonth) * 100) + '%' }"></div>
+                      </div>
+                    </div>
+
+                    <!-- Storage -->
+                    <div>
+                      <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                          <div class="w-3 h-3 bg-purple-500 rounded-full"></div>
+                          <span class="text-gray-300 text-sm">Storage (EBS)</span>
+                        </div>
+                        <span class="text-white font-semibold">${{ costData.breakdown.storage }}</span>
+                      </div>
+                      <div class="w-full bg-gray-800 rounded-full h-2">
+                        <div class="bg-purple-500 h-2 rounded-full" :style="{ width: (parseFloat(costData.breakdown.storage) / parseFloat(costData.currentMonth) * 100) + '%' }"></div>
+                      </div>
+                    </div>
+
+                    <!-- Network -->
+                    <div>
+                      <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                          <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                          <span class="text-gray-300 text-sm">Network (Data Transfer)</span>
+                        </div>
+                        <span class="text-white font-semibold">${{ costData.breakdown.network }}</span>
+                      </div>
+                      <div class="w-full bg-gray-800 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" :style="{ width: (parseFloat(costData.breakdown.network) / parseFloat(costData.currentMonth) * 100) + '%' }"></div>
+                      </div>
+                    </div>
+
+                    <!-- Other -->
+                    <div>
+                      <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                          <div class="w-3 h-3 bg-gray-500 rounded-full"></div>
+                          <span class="text-gray-300 text-sm">Other Services</span>
+                        </div>
+                        <span class="text-white font-semibold">${{ costData.breakdown.other }}</span>
+                      </div>
+                      <div class="w-full bg-gray-800 rounded-full h-2">
+                        <div class="bg-gray-500 h-2 rounded-full" :style="{ width: (parseFloat(costData.breakdown.other) / parseFloat(costData.currentMonth) * 100) + '%' }"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Cost Optimization Tips -->
+                <div class="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 rounded-2xl p-6">
+                  <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
+                    <svg class="w-5 h-5 text-indigo-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    Cost Optimization Tips
+                  </h3>
+                  <ul class="space-y-2 text-sm text-gray-300">
+                    <li class="flex items-start space-x-2">
+                      <span class="text-indigo-400 font-bold">•</span>
+                      <span>Use scheduled downtime to stop instances during off-peak hours</span>
+                    </li>
+                    <li class="flex items-start space-x-2">
+                      <span class="text-indigo-400 font-bold">•</span>
+                      <span>Consider rightsizing your instance type based on actual usage metrics</span>
+                    </li>
+                    <li class="flex items-start space-x-2">
+                      <span class="text-indigo-400 font-bold">•</span>
+                      <span>Enable EBS volume optimization and delete unused snapshots</span>
+                    </li>
+                    <li class="flex items-start space-x-2">
+                      <span class="text-indigo-400 font-bold">•</span>
+                      <span>Review and optimize data transfer costs by using CloudFront or VPC endpoints</span>
+                    </li>
+                  </ul>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Traffic Insights Tab -->
+            <TrafficInsights 
+              v-else-if="activeTab === 'traffic'" 
+              :server-id="serverData?.id"
+              :patterns="trafficPatterns"
+              :loading="trafficLoading"
+              :error="trafficError"
+              @schedule-downtime="handleScheduleFromTraffic"
+              @refresh="fetchTrafficPatterns"
+            />
 
             <!-- Agent Setup Tab -->
             <div v-else-if="activeTab === 'agent' && serverData" class="space-y-6">
@@ -938,6 +1707,7 @@ import {
 } from 'chart.js'
 import apiClient from '@/api/client'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import TrafficInsights from '@/components/TrafficInsights.vue'
 import { useToast } from '@/composables/useToast'
 
 // Register Chart.js components
@@ -984,6 +1754,39 @@ const agentStatus = ref('disconnected') // 'connected', 'stale', 'disconnected'
 const agentVersion = ref(null)
 const latestAgentVersion = ref('1.2.0')
 const showAgentUpdateInstructions = ref(false)
+
+// Cost tracking state
+const loadingCosts = ref(false)
+const costDataAvailable = ref(false)
+const costDataCached = ref(false)
+const costErrorMessage = ref('')
+const iamPolicyCopied = ref(false)
+const costTrackingDisabled = ref(false)
+const showCostInstructions = ref(false)
+const costData = ref({
+  currentMonth: '0.00',
+  lastMonth: '0.00',
+  daily: [],
+  trend: 'stable',
+  breakdown: {
+    compute: '0.00',
+    storage: '0.00',
+    network: '0.00',
+    other: '0.00'
+  }
+})
+const apiStats = ref(null)
+
+// Load cost tracking preference from localStorage
+const loadCostTrackingPreference = () => {
+  const disabled = localStorage.getItem('costTrackingDisabled')
+  costTrackingDisabled.value = disabled === 'true'
+}
+
+// Traffic Insights state
+const trafficPatterns = ref({ success: false })
+const trafficLoading = ref(false)
+const trafficError = ref(null)
 
 // Confirm dialog state
 const confirmDialog = ref({
@@ -1532,36 +2335,125 @@ const distros = [
 ]
 
 const agentStatusDisplay = computed(() => {
-  switch (agentStatus.value) {
-    case 'connected':
-      return {
-        icon: '🟢',
-        text: 'Agent Connected',
-        color: 'text-green-400',
-        bgColor: 'bg-green-500/10',
-        borderColor: 'border-green-500/30',
-        description: 'Receiving real-time metrics'
-      }
-    case 'stale':
-      return {
-        icon: '🟡',
-        text: 'Agent Connection Stale',
-        color: 'text-yellow-400',
-        bgColor: 'bg-yellow-500/10',
-        borderColor: 'border-yellow-500/30',
-        description: `Last seen ${timeSinceLastSeen.value}`
-      }
-    default:
-      return {
-        icon: '🔴',
-        text: 'No Agent Detected',
-        color: 'text-red-400',
-        bgColor: 'bg-red-500/10',
-        borderColor: 'border-red-500/30',
-        description: 'Install agent to get real metrics'
-      }
+  if (agentStatus.value === 'connected') {
+    return {
+      icon: '✅',
+      status: 'Connected',
+      message: 'Agent is actively reporting metrics',
+      bgColor: 'bg-green-500/10',
+      borderColor: 'border-green-500/30',
+      textColor: 'text-green-400'
+    }
+  } else if (agentStatus.value === 'stale') {
+    return {
+      icon: '⚠️',
+      status: 'Stale Connection',
+      message: 'Agent last reported more than 5 minutes ago',
+      bgColor: 'bg-yellow-500/10',
+      borderColor: 'border-yellow-500/30',
+      textColor: 'text-yellow-400'
+    }
+  } else {
+    return {
+      icon: '❌',
+      status: 'Not Connected',
+      message: 'Agent is not installed or not reporting',
+      bgColor: 'bg-red-500/10',
+      borderColor: 'border-red-500/30',
+      textColor: 'text-red-400'
+    }
   }
 })
+
+// Cost chart data
+const costChartData = computed(() => {
+  return {
+    labels: costData.value.daily.map(d => {
+      const date = new Date(d.date)
+      return `${date.getMonth() + 1}/${date.getDate()}`
+    }),
+    datasets: [
+      {
+        label: 'Daily Cost ($)',
+        data: costData.value.daily.map(d => parseFloat(d.cost)),
+        borderColor: 'rgb(99, 102, 241)',
+        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: 'rgb(99, 102, 241)',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2
+      }
+    ]
+  }
+})
+
+// Cost chart options
+const costChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      display: true,
+      position: 'top',
+      labels: {
+        color: '#9CA3AF',
+        font: { size: 12, family: 'Inter, system-ui, sans-serif' }
+      }
+    },
+    tooltip: {
+      mode: 'index',
+      intersect: false,
+      backgroundColor: 'rgba(17, 24, 39, 0.95)',
+      titleColor: '#F3F4F6',
+      bodyColor: '#D1D5DB',
+      borderColor: 'rgba(99, 102, 241, 0.3)',
+      borderWidth: 1,
+      padding: 12,
+      displayColors: false,
+      callbacks: {
+        label: function(context) {
+          return `Cost: $${context.parsed.y.toFixed(2)}`
+        }
+      }
+    }
+  },
+  scales: {
+    y: {
+      beginAtZero: true,
+      ticks: {
+        color: '#9CA3AF',
+        font: { size: 11 },
+        callback: function(value) {
+          return '$' + value.toFixed(2)
+        }
+      },
+      grid: {
+        color: 'rgba(75, 85, 99, 0.3)',
+        drawBorder: false
+      }
+    },
+    x: {
+      ticks: {
+        color: '#9CA3AF',
+        font: { size: 11 },
+        maxRotation: 45,
+        minRotation: 45
+      },
+      grid: {
+        color: 'rgba(75, 85, 99, 0.3)',
+        drawBorder: false
+      }
+    }
+  },
+  interaction: {
+    mode: 'nearest',
+    axis: 'x',
+    intersect: false
+  }
+}
 
 const timeSinceLastSeen = computed(() => {
   if (!agentLastSeen.value) return 'never'
@@ -1586,6 +2478,32 @@ const isAgentOutdated = computed(() => {
 const updateAgentCommand = computed(() => {
   return installCommand.value // Reuse the install command (it updates if agent exists)
 })
+
+// Fetch traffic patterns
+async function fetchTrafficPatterns() {
+  if (!props.serverId) return
+  
+  trafficLoading.value = true
+  trafficError.value = null
+  
+  try {
+    const response = await apiClient.get(`/traffic/server/${props.serverId}/patterns`)
+    trafficPatterns.value = response.data
+  } catch (err) {
+    console.error('Fetch traffic patterns error:', err)
+    trafficError.value = err.response?.data?.message || 'Failed to load traffic patterns'
+    trafficPatterns.value = { success: false }
+  } finally {
+    trafficLoading.value = false
+  }
+}
+
+// Handle schedule downtime from traffic insights
+function handleScheduleFromTraffic(suggestedTime) {
+  console.log('Schedule downtime at:', suggestedTime)
+  // TODO: Emit event to parent or open schedule modal with pre-filled time
+  toast.showSuccess(`Suggested downtime: ${suggestedTime}`)
+}
 
 const closeModal = () => {
   emit('close')
@@ -1713,7 +2631,10 @@ const handleTerminateServer = async () => {
 // Watch for modal opening
 watch(() => props.isOpen, (newVal) => {
   if (newVal && props.serverId) {
+    loadCostTrackingPreference()
     fetchServerMetrics()
+    fetchCostData()
+    // Don't fetch traffic patterns immediately to avoid overwhelming API
   }
 })
 
@@ -1723,6 +2644,124 @@ watch(() => selectedTimeRange.value, () => {
     fetchServerMetrics()
   }
 })
+
+// Watch for active tab changes
+watch(() => activeTab.value, (newVal) => {
+  if (newVal === 'costs' && props.serverId) {
+    // Always fetch API stats when costs tab is opened
+    fetchApiStats()
+    // Only fetch cost data if not already loaded
+    if (costData.value.daily.length === 0) {
+      fetchCostData()
+    }
+  }
+  if (newVal === 'traffic' && props.serverId && !trafficPatterns.value.success) {
+    fetchTrafficPatterns()
+  }
+})
+
+// Fetch cost data
+async function fetchCostData(forceRefresh = false) {
+  if (!props.serverId) return
+  
+  // Check if cost tracking is disabled
+  if (costTrackingDisabled.value) {
+    console.log('💰 Cost tracking is disabled, skipping API call')
+    return
+  }
+  
+  loadingCosts.value = true
+  costDataAvailable.value = false
+  costDataCached.value = false
+  costErrorMessage.value = ''
+  
+  try {
+    const url = forceRefresh 
+      ? `/costs/server/${props.serverId}?period=30&force=true`
+      : `/costs/server/${props.serverId}?period=30`
+    
+    const response = await apiClient.get(url)
+    
+    if (response.data.success && response.data.available) {
+      costData.value = response.data.data
+      costDataAvailable.value = true
+      costDataCached.value = response.data.cached || false
+    } else {
+      costDataAvailable.value = false
+      costErrorMessage.value = response.data.message || 'Cost data is not available'
+    }
+  } catch (error) {
+    console.error('Failed to fetch cost data:', error)
+    costDataAvailable.value = false
+    costErrorMessage.value = error.response?.data?.message || 'Failed to load cost data'
+  } finally {
+    loadingCosts.value = false
+  }
+}
+
+// Fetch API usage stats
+async function fetchApiStats() {
+  try {
+    const response = await apiClient.get('/costs/stats?days=30')
+    if (response.data.success) {
+      apiStats.value = response.data.stats
+    }
+  } catch (error) {
+    console.error('Failed to fetch API stats:', error)
+  }
+}
+
+// Enable cost tracking
+function enableCostTracking() {
+  costTrackingDisabled.value = false
+  localStorage.setItem('costTrackingDisabled', 'false')
+  fetchCostData()
+  toast.success('Cost tracking enabled')
+}
+
+// Disable cost tracking
+function disableCostTracking() {
+  costTrackingDisabled.value = true
+  localStorage.setItem('costTrackingDisabled', 'true')
+  costDataAvailable.value = false
+  costErrorMessage.value = ''
+  toast.success('Cost tracking disabled. No AWS API calls will be made.')
+}
+
+// Refresh cost data (force API call)
+function refreshCostData() {
+  fetchCostData(true)
+}
+
+// Copy IAM policy to clipboard
+function copyIAMPolicy() {
+  const policy = `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ce:GetCostAndUsage",
+        "ce:GetCostForecast"
+      ],
+      "Resource": "*"
+    }
+  ]
+}`
+  
+  navigator.clipboard.writeText(policy).then(() => {
+    iamPolicyCopied.value = true
+    setTimeout(() => {
+      iamPolicyCopied.value = false
+    }, 2000)
+  })
+}
+
+// Retry fetching costs
+function retryFetchCosts() {
+  fetchCostData()
+}
+
 </script>
 
 <style scoped>

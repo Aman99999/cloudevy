@@ -8,6 +8,9 @@ import serversRoutes from './routes/servers.js';
 import metricsRoutes from './routes/metrics.js';
 import agentRoutes from './routes/agent.js';
 import schedulesRoutes from './routes/schedules.js';
+import teamRoutes from './routes/team.js';
+import costsRoutes from './routes/costs.js';
+import trafficRoutes from './routes/traffic.js';
 
 dotenv.config();
 
@@ -56,6 +59,9 @@ app.use('/api/servers', serversRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/agent', agentRoutes);
 app.use('/api/schedules', schedulesRoutes);
+app.use('/api/team', teamRoutes);
+app.use('/api/costs', costsRoutes);
+app.use('/api/traffic', trafficRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -21,6 +21,12 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
+    path: '/accept-invitation',
+    name: 'AcceptInvitation',
+    component: () => import('../views/AcceptInvitation.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
     path: '/:workspaceSlug',
     component: () => import('../layouts/WorkspaceLayout.vue'),
     meta: { requiresAuth: true },
@@ -47,6 +53,12 @@ const routes = [
         path: 'costs',
         name: 'Costs',
         component: () => import('../views/Costs.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'team',
+        name: 'Team',
+        component: () => import('../views/Team.vue'),
         meta: { requiresAuth: true }
       }
     ]

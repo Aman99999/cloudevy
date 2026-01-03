@@ -346,7 +346,8 @@ const fetchDashboardData = async () => {
 
     const activityResponse = await apiClient.get('/dashboard/activity')
     if (activityResponse.data.success) {
-      recentActivity.value = activityResponse.data.data
+      // Limit to 5 most recent activities
+      recentActivity.value = activityResponse.data.data.slice(0, 5)
     }
   } catch (error) {
     console.error('Failed to fetch dashboard data:', error)
