@@ -74,6 +74,108 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * POST /api/servers/sync
+ * Sync all AWS servers' details (status, platform, IP) from AWS
+ */
+router.post('/sync', async (req, res) => {
+  try {
+    const workspaceId = req.user.workspaceId;
+
+    // Get all AWS servers with cloud accounts
+    const servers = await prisma.server.findMany({
+      where: { 
+        workspaceId,
+        provider: 'aws',
+        instanceId: { not: null }
+      },
+      include: {
+        cloudAccount: true
+      }
+    });
+
+    const syncResults = [];
+
+    for (const server of servers) {
+      try {
+        // Decrypt credentials
+        const credentials = JSON.parse(decryptCredentials(server.cloudAccount.credentials));
+
+        // Create EC2 client
+        const client = new EC2Client({
+          region: server.region || 'us-east-1',
+          credentials: {
+            accessKeyId: credentials.accessKey,
+            secretAccessKey: credentials.secretKey
+          }
+        });
+
+        // Get instance details from AWS
+        const command = new DescribeInstancesCommand({
+          InstanceIds: [server.instanceId]
+        });
+
+        const response = await client.send(command);
+        
+        if (response.Reservations && response.Reservations.length > 0) {
+          const instance = response.Reservations[0].Instances[0];
+          const status = instance.State?.Name || 'unknown';
+
+          // Determine platform
+          let platform = instance.PlatformDetails || 'Linux/UNIX';
+          if (platform.includes('Windows')) {
+            platform = 'Windows';
+          } else if (platform.includes('Red Hat')) {
+            platform = 'Red Hat Linux';
+          } else if (platform.includes('SUSE')) {
+            platform = 'SUSE Linux';
+          } else if (platform.includes('Linux')) {
+            platform = 'Linux';
+          }
+
+          // Update server in database
+          await prisma.server.update({
+            where: { id: server.id },
+            data: {
+              status,
+              platform,
+              ipAddress: instance.PublicIpAddress || server.ipAddress
+            }
+          });
+
+          syncResults.push({
+            serverId: server.id,
+            serverName: server.name,
+            success: true,
+            status,
+            platform
+          });
+        }
+      } catch (error) {
+        syncResults.push({
+          serverId: server.id,
+          serverName: server.name,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Synced ${syncResults.filter(r => r.success).length} of ${servers.length} servers`,
+      data: syncResults
+    });
+
+  } catch (error) {
+    console.error('Sync servers error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to sync servers'
+    });
+  }
+});
+
+/**
  * POST /api/servers
  * Add a new server
  */
@@ -108,7 +210,7 @@ router.post(
         });
       }
 
-      const { cloudAccountId, name, ipAddress, instanceType, region, instanceId } = req.body;
+      const { cloudAccountId, name, ipAddress, instanceType, region, instanceId, platform } = req.body;
       const workspaceId = req.user.workspaceId;
 
       // Verify cloud account belongs to this workspace
@@ -157,6 +259,7 @@ router.post(
             region: region?.trim() || cloudAccount.region || null,
             instanceType: instanceType?.trim() || null,
             instanceId: instanceId?.trim() || null,
+            platform: platform?.trim() || null,
             apiKey: apiKey,
             status: 'running'
           },
@@ -727,15 +830,32 @@ router.get('/:id/status', async (req, res) => {
     const instance = response.Reservations[0].Instances[0];
     const status = instance.State?.Name || 'unknown';
 
+    // Determine platform
+    let platform = instance.PlatformDetails || 'Linux/UNIX';
+    // Simplify platform name for better display
+    if (platform.includes('Windows')) {
+      platform = 'Windows';
+    } else if (platform.includes('Red Hat')) {
+      platform = 'Red Hat Linux';
+    } else if (platform.includes('SUSE')) {
+      platform = 'SUSE Linux';
+    } else if (platform.includes('Linux')) {
+      platform = 'Linux';
+    }
+
     // Update in database
     await prisma.server.update({
       where: { id: serverId },
-      data: { status }
+      data: { 
+        status,
+        platform
+      }
     });
 
     res.json({
       success: true,
-      status
+      status,
+      platform
     });
 
   } catch (error) {
@@ -897,12 +1017,26 @@ router.get('/:id/status', async (req, res) => {
     const instance = response.Reservations[0].Instances[0];
     const status = instance.State?.Name || 'unknown';
 
+    // Determine platform
+    let platform = instance.PlatformDetails || 'Linux/UNIX';
+    // Simplify platform name for better display
+    if (platform.includes('Windows')) {
+      platform = 'Windows';
+    } else if (platform.includes('Red Hat')) {
+      platform = 'Red Hat Linux';
+    } else if (platform.includes('SUSE')) {
+      platform = 'SUSE Linux';
+    } else if (platform.includes('Linux')) {
+      platform = 'Linux';
+    }
+
     // Update local database if status changed
-    if (server.status !== status) {
+    if (server.status !== status || server.platform !== platform) {
       await prisma.server.update({
         where: { id: serverId },
         data: { 
           status: status,
+          platform: platform,
           ipAddress: instance.PublicIpAddress || server.ipAddress
         }
       });
@@ -912,6 +1046,7 @@ router.get('/:id/status', async (req, res) => {
       success: true,
       data: {
         status: status,
+        platform: platform,
         ipAddress: instance.PublicIpAddress,
         privateIpAddress: instance.PrivateIpAddress,
         stateTransitionReason: instance.StateTransitionReason

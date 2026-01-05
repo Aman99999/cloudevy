@@ -217,6 +217,10 @@ router.get('/server/:serverId', async (req, res) => {
         userMessage = 'Cost data not yet available. Cost Explorer needs 24 hours after enabling to populate data.';
       } else if (awsError.message?.includes('not subscribed')) {
         userMessage = 'Cost Explorer is not enabled. Please enable it in AWS Billing Dashboard.';
+      } else if (awsError.message?.includes('free plan') || awsError.message?.includes('not available for free tier')) {
+        userMessage = 'AWS Cost Explorer is not available on free tier accounts. It costs $0.01 per API request or requires AWS Business/Enterprise Support. You can disable cost tracking in CloudEvy settings.';
+      } else if (awsError.name === 'SubscriptionRequiredException' || awsError.name === 'OptInRequiredException') {
+        userMessage = 'AWS Cost Explorer requires a paid subscription ($0.01 per request) or Business/Enterprise Support plan. Not available on free tier.';
       } else if (awsError.name === 'ValidationException') {
         if (awsError.message?.includes('Tag') || awsError.message?.includes('not allowed')) {
           userMessage = 'Cost Allocation Tag "Name" is not activated. Please activate it in AWS Billing & Cost Management → Cost Allocation Tags to see per-instance costs. Note: It can take 24 hours after activation for data to appear.';

@@ -24,6 +24,53 @@
           </button>
         </div>
 
+        <!-- IAM Permissions Notice -->
+        <div class="mb-6 bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+          <div class="flex items-start space-x-3">
+            <svg class="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div class="flex-1">
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-sm font-semibold text-blue-300">⚙️ Required AWS IAM Permissions</h4>
+                <button
+                  type="button"
+                  @click="showPermissions = !showPermissions"
+                  class="text-xs text-blue-400 hover:text-blue-300 underline"
+                >
+                  {{ showPermissions ? 'Hide' : 'View Policy' }}
+                </button>
+              </div>
+              <p class="text-xs text-gray-400">
+                Your IAM user needs specific permissions to modify instance types and volumes. Click "View Policy" to see the required permissions.
+              </p>
+              
+              <!-- Expandable Permissions Section -->
+              <div v-if="showPermissions" class="mt-4 bg-gray-900/50 rounded-lg p-3 border border-gray-700">
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-xs font-medium text-gray-300">IAM Policy JSON:</p>
+                  <button
+                    type="button"
+                    @click="copyPermissions"
+                    class="text-xs px-2 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded transition"
+                  >
+                    {{ permissionsCopied ? '✓ Copied!' : '📋 Copy' }}
+                  </button>
+                </div>
+                <pre class="text-xs text-gray-300 overflow-x-auto bg-gray-950/50 p-2 rounded border border-gray-800"><code>{{ iamPolicyJson }}</code></pre>
+                <div class="mt-3 space-y-2">
+                  <p class="text-xs text-yellow-400">
+                    <strong>⚠️ Important:</strong> Without these permissions, scaling jobs will fail with an error.
+                  </p>
+                  <p class="text-xs text-gray-400">
+                    <strong>How to add:</strong> AWS Console → IAM → Users → Your User → Add Permissions → Create Policy → Paste JSON above
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Form -->
         <form @submit.prevent="saveSchedule" class="space-y-6">
           <!-- Schedule Name -->
@@ -85,6 +132,23 @@
               Target Instance Type (Optional)
               <span class="text-gray-500 text-xs ml-2">(leave empty to only modify volume)</span>
             </label>
+            
+            <!-- Free Tier Info -->
+            <div class="mb-3 bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+              <div class="flex items-start space-x-2">
+                <svg class="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div class="flex-1">
+                  <p class="text-xs text-blue-400 font-medium">ℹ️ Instance Type Availability</p>
+                  <p class="text-xs text-gray-400 mt-1">
+                    <strong class="text-green-400">✅ Free Tier</strong> types work on all AWS accounts. 
+                    <strong class="text-yellow-400">💳 Paid</strong> types require a paid AWS account (will fail on free tier).
+                  </p>
+                </div>
+              </div>
+            </div>
+            
             <select
               v-model="form.targetInstanceType"
               class="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition"
@@ -101,6 +165,9 @@
                 </option>
               </optgroup>
             </select>
+            <p class="text-xs text-gray-500 mt-2">
+              💡 <strong>Tip:</strong> EBS volume scaling (below) works on all accounts including free tier!
+            </p>
           </div>
 
           <!-- EBS Volume Configuration -->
@@ -349,6 +416,31 @@ const scaleBackTime = ref('08:00');
 const selectedDays = ref([0]); // Monday by default
 const enableAutoScaleBack = ref(false);
 const enableVolumeScaling = ref(false);
+const showPermissions = ref(false);
+const permissionsCopied = ref(false);
+
+// IAM Policy JSON for display
+const iamPolicyJson = `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudEvyScheduledScaling",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances",
+        "ec2:DescribeInstanceStatus",
+        "ec2:DescribeVolumes",
+        "ec2:DescribeVolumesModifications",
+        "ec2:ModifyInstanceAttribute",
+        "ec2:ModifyVolume",
+        "ec2:StopInstances",
+        "ec2:StartInstances",
+        "ec2:RebootInstances"
+      ],
+      "Resource": "*"
+    }
+  ]
+}`;
 
 const form = ref({
   name: '',
@@ -407,28 +499,49 @@ const weekDays = [
 
 // AWS instance types
 const instanceTypes = [
-  // General Purpose - T2
-  { value: 't2.micro', label: 't2.micro (1 vCPU, 1 GB)', category: 'General Purpose (T2)' },
-  { value: 't2.small', label: 't2.small (1 vCPU, 2 GB)', category: 'General Purpose (T2)' },
-  { value: 't2.medium', label: 't2.medium (2 vCPU, 4 GB)', category: 'General Purpose (T2)' },
-  { value: 't2.large', label: 't2.large (2 vCPU, 8 GB)', category: 'General Purpose (T2)' },
-  { value: 't2.xlarge', label: 't2.xlarge (4 vCPU, 16 GB)', category: 'General Purpose (T2)' },
-  // General Purpose - T3
-  { value: 't3.micro', label: 't3.micro (2 vCPU, 1 GB)', category: 'General Purpose (T3)' },
-  { value: 't3.small', label: 't3.small (2 vCPU, 2 GB)', category: 'General Purpose (T3)' },
-  { value: 't3.medium', label: 't3.medium (2 vCPU, 4 GB)', category: 'General Purpose (T3)' },
-  { value: 't3.large', label: 't3.large (2 vCPU, 8 GB)', category: 'General Purpose (T3)' },
-  { value: 't3.xlarge', label: 't3.xlarge (4 vCPU, 16 GB)', category: 'General Purpose (T3)' },
-  { value: 't3.2xlarge', label: 't3.2xlarge (8 vCPU, 32 GB)', category: 'General Purpose (T3)' },
-  // Compute Optimized
-  { value: 'c5.large', label: 'c5.large (2 vCPU, 4 GB)', category: 'Compute Optimized' },
-  { value: 'c5.xlarge', label: 'c5.xlarge (4 vCPU, 8 GB)', category: 'Compute Optimized' },
-  { value: 'c5.2xlarge', label: 'c5.2xlarge (8 vCPU, 16 GB)', category: 'Compute Optimized' },
-  { value: 'c5.4xlarge', label: 'c5.4xlarge (16 vCPU, 32 GB)', category: 'Compute Optimized' },
-  // Memory Optimized
-  { value: 'r5.large', label: 'r5.large (2 vCPU, 16 GB)', category: 'Memory Optimized' },
-  { value: 'r5.xlarge', label: 'r5.xlarge (4 vCPU, 32 GB)', category: 'Memory Optimized' },
-  { value: 'r5.2xlarge', label: 'r5.2xlarge (8 vCPU, 64 GB)', category: 'Memory Optimized' }
+  // FREE TIER ELIGIBLE - Available on all AWS accounts including free tier
+  { value: 't2.micro', label: 't2.micro (1 vCPU, 1 GB) ✅ Free Tier', category: '✅ Free Tier Eligible', freeTier: true },
+  { value: 't3.micro', label: 't3.micro (2 vCPU, 1 GB) ✅ Free Tier', category: '✅ Free Tier Eligible', freeTier: true },
+  
+  // PAID ONLY - General Purpose T2
+  { value: 't2.nano', label: 't2.nano (1 vCPU, 0.5 GB) 💳 Paid', category: '💳 General Purpose (T2) - Paid Account Required', freeTier: false },
+  { value: 't2.small', label: 't2.small (1 vCPU, 2 GB) 💳 Paid', category: '💳 General Purpose (T2) - Paid Account Required', freeTier: false },
+  { value: 't2.medium', label: 't2.medium (2 vCPU, 4 GB) 💳 Paid', category: '💳 General Purpose (T2) - Paid Account Required', freeTier: false },
+  { value: 't2.large', label: 't2.large (2 vCPU, 8 GB) 💳 Paid', category: '💳 General Purpose (T2) - Paid Account Required', freeTier: false },
+  { value: 't2.xlarge', label: 't2.xlarge (4 vCPU, 16 GB) 💳 Paid', category: '💳 General Purpose (T2) - Paid Account Required', freeTier: false },
+  { value: 't2.2xlarge', label: 't2.2xlarge (8 vCPU, 32 GB) 💳 Paid', category: '💳 General Purpose (T2) - Paid Account Required', freeTier: false },
+  
+  // PAID ONLY - General Purpose T3
+  { value: 't3.nano', label: 't3.nano (2 vCPU, 0.5 GB) 💳 Paid', category: '💳 General Purpose (T3) - Paid Account Required', freeTier: false },
+  { value: 't3.small', label: 't3.small (2 vCPU, 2 GB) 💳 Paid', category: '💳 General Purpose (T3) - Paid Account Required', freeTier: false },
+  { value: 't3.medium', label: 't3.medium (2 vCPU, 4 GB) 💳 Paid', category: '💳 General Purpose (T3) - Paid Account Required', freeTier: false },
+  { value: 't3.large', label: 't3.large (2 vCPU, 8 GB) 💳 Paid', category: '💳 General Purpose (T3) - Paid Account Required', freeTier: false },
+  { value: 't3.xlarge', label: 't3.xlarge (4 vCPU, 16 GB) 💳 Paid', category: '💳 General Purpose (T3) - Paid Account Required', freeTier: false },
+  { value: 't3.2xlarge', label: 't3.2xlarge (8 vCPU, 32 GB) 💳 Paid', category: '💳 General Purpose (T3) - Paid Account Required', freeTier: false },
+  
+  // PAID ONLY - General Purpose T3a (AMD)
+  { value: 't3a.nano', label: 't3a.nano (2 vCPU, 0.5 GB) 💳 Paid', category: '💳 General Purpose (T3a - AMD) - Paid Account Required', freeTier: false },
+  { value: 't3a.micro', label: 't3a.micro (2 vCPU, 1 GB) 💳 Paid', category: '💳 General Purpose (T3a - AMD) - Paid Account Required', freeTier: false },
+  { value: 't3a.small', label: 't3a.small (2 vCPU, 2 GB) 💳 Paid', category: '💳 General Purpose (T3a - AMD) - Paid Account Required', freeTier: false },
+  { value: 't3a.medium', label: 't3a.medium (2 vCPU, 4 GB) 💳 Paid', category: '💳 General Purpose (T3a - AMD) - Paid Account Required', freeTier: false },
+  { value: 't3a.large', label: 't3a.large (2 vCPU, 8 GB) 💳 Paid', category: '💳 General Purpose (T3a - AMD) - Paid Account Required', freeTier: false },
+  
+  // PAID ONLY - Compute Optimized
+  { value: 'c5.large', label: 'c5.large (2 vCPU, 4 GB) 💳 Paid', category: '💳 Compute Optimized - Paid Account Required', freeTier: false },
+  { value: 'c5.xlarge', label: 'c5.xlarge (4 vCPU, 8 GB) 💳 Paid', category: '💳 Compute Optimized - Paid Account Required', freeTier: false },
+  { value: 'c5.2xlarge', label: 'c5.2xlarge (8 vCPU, 16 GB) 💳 Paid', category: '💳 Compute Optimized - Paid Account Required', freeTier: false },
+  { value: 'c5.4xlarge', label: 'c5.4xlarge (16 vCPU, 32 GB) 💳 Paid', category: '💳 Compute Optimized - Paid Account Required', freeTier: false },
+  
+  // PAID ONLY - Memory Optimized
+  { value: 'r5.large', label: 'r5.large (2 vCPU, 16 GB) 💳 Paid', category: '💳 Memory Optimized - Paid Account Required', freeTier: false },
+  { value: 'r5.xlarge', label: 'r5.xlarge (4 vCPU, 32 GB) 💳 Paid', category: '💳 Memory Optimized - Paid Account Required', freeTier: false },
+  { value: 'r5.2xlarge', label: 'r5.2xlarge (8 vCPU, 64 GB) 💳 Paid', category: '💳 Memory Optimized - Paid Account Required', freeTier: false },
+  
+  // PAID ONLY - Burstable Performance (ARM)
+  { value: 't4g.nano', label: 't4g.nano (2 vCPU ARM, 0.5 GB) 💳 Paid', category: '💳 ARM-based (Graviton) - Paid Account Required', freeTier: false },
+  { value: 't4g.micro', label: 't4g.micro (2 vCPU ARM, 1 GB) 💳 Paid', category: '💳 ARM-based (Graviton) - Paid Account Required', freeTier: false },
+  { value: 't4g.small', label: 't4g.small (2 vCPU ARM, 2 GB) 💳 Paid', category: '💳 ARM-based (Graviton) - Paid Account Required', freeTier: false },
+  { value: 't4g.medium', label: 't4g.medium (2 vCPU ARM, 4 GB) 💳 Paid', category: '💳 ARM-based (Graviton) - Paid Account Required', freeTier: false }
 ];
 
 const instanceCategories = computed(() => {
@@ -552,6 +665,19 @@ watch(() => form.value.targetInstanceType, (newType) => {
     scaleBackForm.value.originalInstanceType = newType;
   }
 });
+
+// Copy permissions to clipboard
+function copyPermissions() {
+  navigator.clipboard.writeText(iamPolicyJson).then(() => {
+    permissionsCopied.value = true;
+    setTimeout(() => {
+      permissionsCopied.value = false;
+    }, 2000);
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+    alert('Failed to copy to clipboard');
+  });
+}
 
 async function saveSchedule() {
   try {

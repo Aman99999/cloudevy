@@ -62,7 +62,7 @@
           <div class="flex items-start justify-between mb-4">
             <div class="flex-1">
               <h3 class="text-lg font-bold text-white mb-1">{{ server.name }}</h3>
-              <div class="flex items-center space-x-2">
+              <div class="flex items-center space-x-2 mb-2">
                 <span
                   :class="[
                     'px-2 py-1 rounded-lg text-xs font-medium',
@@ -77,6 +77,9 @@
                   ]"
                 >
                   {{ server.status }}
+                </span>
+                <span v-if="server.platform" class="px-2 py-1 rounded-lg text-xs font-medium bg-blue-500/20 text-blue-400">
+                  {{ server.platform }}
                 </span>
               </div>
             </div>

@@ -257,31 +257,56 @@ async function modifyInstanceType(client, instanceId, targetInstanceType, curren
 
   console.log(`   🔧 Modifying instance type to: ${targetInstanceType}`);
   
-  // Step 1: Stop the instance if it's running
-  const needsStop = currentState === 'running' || currentState === 'pending';
-  if (needsStop) {
-    console.log(`   ⏹️  Stopping instance before modification...`);
-    await stopInstance(client, instanceId);
-    
-    // Wait for instance to stop (AWS requires stopped state)
-    await waitForInstanceState(client, instanceId, 'stopped', 180000); // 3 minutes timeout
-  }
-
-  // Step 2: Modify the instance type
-  const modifyCommand = new ModifyInstanceAttributeCommand({
-    InstanceId: instanceId,
-    InstanceType: {
-      Value: targetInstanceType
+  try {
+    // Step 1: Stop the instance if it's running
+    const needsStop = currentState === 'running' || currentState === 'pending';
+    if (needsStop) {
+      console.log(`   ⏹️  Stopping instance before modification...`);
+      await stopInstance(client, instanceId);
+      
+      // Wait for instance to stop (AWS requires stopped state)
+      await waitForInstanceState(client, instanceId, 'stopped', 180000); // 3 minutes timeout
     }
-  });
 
-  await client.send(modifyCommand);
-  console.log(`   ✅ Instance type modified to: ${targetInstanceType}`);
+    // Step 2: Modify the instance type
+    const modifyCommand = new ModifyInstanceAttributeCommand({
+      InstanceId: instanceId,
+      InstanceType: {
+        Value: targetInstanceType
+      }
+    });
 
-  // Step 3: Start the instance again if it was running
-  if (needsStop) {
-    console.log(`   ▶️  Starting instance after modification...`);
-    await startInstance(client, instanceId);
+    await client.send(modifyCommand);
+    console.log(`   ✅ Instance type modified to: ${targetInstanceType}`);
+
+    // Step 3: Start the instance again if it was running
+    if (needsStop) {
+      console.log(`   ▶️  Starting instance after modification...`);
+      await startInstance(client, instanceId);
+    }
+  } catch (error) {
+    console.error(`   ❌ Failed to modify instance type:`, error.message);
+    console.error(`   ❌ Error details:`, {
+      name: error.name,
+      code: error.Code || error.code,
+      statusCode: error.$metadata?.httpStatusCode,
+      requestId: error.$metadata?.requestId
+    });
+    
+    // Provide more helpful error messages
+    if (error.message?.includes('not available for free plan') || 
+        error.message?.includes('not supported') ||
+        error.name === 'SubscriptionRequiredException') {
+      throw new Error(`AWS Error: ${error.message}. This is likely an IAM permission issue OR instance type compatibility issue. Required IAM permissions: ec2:ModifyInstanceAttribute, ec2:StopInstances, ec2:StartInstances. Also check if instance types are compatible.`);
+    } else if (error.name === 'UnauthorizedOperation' || error.name === 'AccessDenied') {
+      throw new Error(`IAM permission denied: ${error.message}. Required permissions: ec2:ModifyInstanceAttribute, ec2:StopInstances, ec2:StartInstances, ec2:DescribeInstances. Make sure permissions are attached to the correct IAM user and have propagated (wait 10 minutes).`);
+    } else if (error.name === 'InvalidParameterValue') {
+      throw new Error(`Invalid instance type "${targetInstanceType}": ${error.message}. Check if the target type is compatible with your current configuration (same virtualization type, architecture, etc).`);
+    } else if (error.name === 'UnsupportedOperation') {
+      throw new Error(`Unsupported operation: ${error.message}. This instance might not support type changes (e.g., EC2-Classic instances, or incompatible instance families).`);
+    }
+    
+    throw error;
   }
 }
 

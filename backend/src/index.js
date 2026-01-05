@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { createServer } from 'http';
 import authRoutes from './routes/auth.js';
 import dashboardRoutes from './routes/dashboard.js';
 import cloudAccountsRoutes from './routes/cloudAccounts.js';
@@ -11,6 +12,7 @@ import schedulesRoutes from './routes/schedules.js';
 import teamRoutes from './routes/team.js';
 import costsRoutes from './routes/costs.js';
 import trafficRoutes from './routes/traffic.js';
+import { initializeWebSocketServer } from './services/websocketServer.js';
 
 dotenv.config();
 
@@ -47,7 +49,8 @@ app.use(express.json());
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
-    timestamp: new Date().toISOString() 
+    timestamp: new Date().toISOString(),
+    websocket: 'available at /ws/logs'
   });
 });
 
@@ -74,10 +77,17 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
+// Create HTTP server and attach WebSocket server
+const server = createServer(app);
+
+// Initialize WebSocket server for log streaming
+initializeWebSocketServer(server);
+
 // Start server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🚀 CloudEvy Backend running on http://localhost:${PORT}`);
   console.log(`📊 Environment: ${NODE_ENV}`);
   console.log(`🌐 CORS Origin: ${CORS_ORIGIN}`);
+  console.log(`🔌 WebSocket server available at ws://localhost:${PORT}/ws/logs`);
 });
 

@@ -60,15 +60,18 @@ model User {
 
 // Cloud Accounts (AWS, Azure, GCP connections)
 model CloudAccount {
-  id          Int      @id @default(autoincrement())
-  workspaceId Int      @map("workspace_id")
-  provider    String   @db.VarChar(50)
-  accountName String   @map("account_name") @db.VarChar(255)
-  credentials String?  @db.Text
-  region      String?  @db.VarChar(100)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id             Int      @id @default(autoincrement())
+  workspaceId    Int      @map("workspace_id")
+  provider       String   @db.VarChar(50)
+  accountName    String   @map("account_name") @db.VarChar(255)
+  credentials    String?  @db.Text
+  region         String?  @db.VarChar(100)
+  sshPrivateKey  String?  @map("ssh_private_key") @db.Text  // Encrypted SSH private key for log streaming
+  sshUsername    String?  @map("ssh_username") @db.VarChar(100)  // Default: ec2-user, ubuntu, etc.
+  sshPort        Int?     @default(22) @map("ssh_port")  // Default SSH port
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -89,6 +92,7 @@ model Server {
   region           String?       @db.VarChar(100)
   instanceType     String?       @map("instance_type") @db.VarChar(100)
   instanceId       String?       @map("instance_id") @db.VarChar(255)
+  platform         String?       @map("platform") @db.VarChar(100)  // OS/Platform (e.g., "Linux/UNIX", "Windows", "Red Hat Enterprise Linux")
   apiKey           String?       @unique @map("api_key") @db.VarChar(255)
   status           String        @default("running") @db.VarChar(50)
   agentVersion     String?       @map("agent_version") @db.VarChar(20)
