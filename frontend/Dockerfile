@@ -20,8 +20,14 @@ FROM nginx:alpine
 # Copy built files
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# nginx:alpine envsubsts files in /etc/nginx/templates/*.template into
+# /etc/nginx/conf.d/*.conf at startup, using env vars from the container.
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Defaults work for local docker-compose; Fly overrides via fly.toml [env].
+ENV BACKEND_HOST=backend \
+    BACKEND_PORT=8002 \
+    DNS_RESOLVER=127.0.0.11
 
 EXPOSE 8001
 

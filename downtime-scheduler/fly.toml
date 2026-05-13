@@ -1,0 +1,33 @@
+app = "cloudevy-scheduler"
+primary_region = "bom"
+
+# IMPORTANT: this Dockerfile copies from `backend/prisma`, so the build context
+# must be the project root. Always deploy this app with:
+#
+#   fly deploy --config downtime-scheduler/fly.toml \
+#              --dockerfile downtime-scheduler/Dockerfile .
+#
+# (run from the repo root)
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8003"
+
+# /health is exposed on 8003, but only over Fly's private network — no public
+# load balancer. Use `fly logs -a cloudevy-scheduler` to monitor.
+[[services]]
+  internal_port = 8003
+  protocol = "tcp"
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[services.tcp_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpus = 1

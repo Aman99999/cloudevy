@@ -6,20 +6,18 @@ const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL
   }
-  
-  // 2. Auto-detect based on current hostname
+
   const hostname = window.location.hostname
-  
-  if (hostname === 'cloudevy.in' || hostname === 'www.cloudevy.in') {
-    // Production
-    return 'https://cloudevy.in/api'
-  } else if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    // Local development
-    return 'http://localhost:8002/api'
-  } else {
-    // Default to localhost for any other hostname
+
+  // 2. Local dev — Vite serves the SPA, backend runs separately on 8002.
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return 'http://localhost:8002/api'
   }
+
+  // 3. Anywhere else (prod, preview, cloudevy.in, www.cloudevy.in, *.fly.dev) —
+  //    the frontend's nginx proxies /api to the backend over Fly's private
+  //    network, so a same-origin relative URL is correct and avoids CORS.
+  return '/api'
 }
 
 const API_BASE_URL = getApiBaseUrl()
