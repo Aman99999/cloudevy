@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(fly version *)",
+      "Bash(flyctl version *)",
+      "Bash(fly auth *)",
+      "Bash(docker version *)",
+      "Bash(docker compose *)",
+      "Bash(docker exec *)",
+      "Bash(curl -sS -o /dev/null -w \"status=%{http_code} bytes=%{size_download} content-type=%{content_type}\\\\n\" http://localhost:19001/)",
+      "Bash(curl -sS -o /tmp/login.body -w \"status=%{http_code} content-type=%{content_type}\\\\n\" -X POST http://localhost:19001/api/auth/login -H 'content-type: application/json' -d '{}')",
+      "Bash(curl -sS -o /tmp/404.body -w \"status=%{http_code} content-type=%{content_type}\\\\n\" http://localhost:19001/api/auth/this-route-does-not-exist)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh auth *)",
+      "Bash(ssh -T -o StrictHostKeyChecking=no -o ConnectTimeout=5 git@github.com)",
+      "Bash(brew install *)",
+      "Bash(fly orgs *)",
+      "Bash(fly platform *)",
+      "Bash(fly apps *)"
+    ]
+  }
+}
