@@ -213,6 +213,10 @@
                         <span class="text-sm text-white font-medium">{{ selectedCloudServer.name }}</span>
                       </div>
                       <div class="flex items-center justify-between">
+                        <span class="text-xs text-gray-500">Instance ID</span>
+                        <span class="text-sm text-white font-mono">{{ selectedCloudServer.id }}</span>
+                      </div>
+                      <div class="flex items-center justify-between">
                         <span class="text-xs text-gray-500">Instance Type</span>
                         <span class="text-sm text-white">{{ selectedCloudServer.instanceType }}</span>
                       </div>
@@ -235,6 +239,10 @@
                         <span class="text-xs text-gray-500">Private IP</span>
                         <span class="text-sm text-white font-mono">{{ selectedCloudServer.privateIp }}</span>
                       </div>
+                      <div v-if="selectedCloudServer.securityGroups && selectedCloudServer.securityGroups.length > 0" class="flex items-center justify-between">
+                        <span class="text-xs text-gray-500">Security Group</span>
+                        <span class="text-sm text-white font-mono">{{ selectedCloudServer.securityGroups[0].id }}</span>
+                      </div>
                       <div class="flex items-center justify-between">
                         <span class="text-xs text-gray-500">Region</span>
                         <span class="text-sm text-white">{{ selectedCloudServer.region || selectedCloudServer.location || 'N/A' }}</span>
@@ -242,14 +250,17 @@
                     </div>
                   </div>
 
-                  <div v-if="cloudServers.length > 0" class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                  <div v-if="cloudServers.length > 0" class="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-xl p-4">
                     <div class="flex items-start space-x-3">
                       <svg class="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                       </svg>
                       <div>
-                        <p class="text-blue-300 text-sm">
-                          <strong class="font-semibold">Note:</strong> Select a server from your cloud account to register it in Cloudevy for monitoring and management.
+                        <p class="text-blue-300 text-sm mb-2">
+                          <strong class="font-semibold">✨ Auto-Configuration Enabled!</strong>
+                        </p>
+                        <p class="text-blue-200/80 text-xs">
+                          CloudEvy will automatically capture Instance ID and Security Group ID from your selected server. This enables automatic security group configuration for monitoring.
                         </p>
                       </div>
                     </div>
@@ -472,6 +483,7 @@ const form = ref({
   instanceType: '',
   region: '',
   instanceId: '', // Cloud provider instance ID
+  securityGroupId: '', // Security group ID for auto-configuration
   operatingSystem: '',
   storageSize: 30
 })
@@ -546,12 +558,19 @@ const fetchCloudServers = async () => {
 
 const onServerSelected = () => {
   if (selectedCloudServer.value) {
-    // Auto-populate form fields including instanceId
+    // Auto-populate form fields including instanceId and securityGroupId
     form.value.name = selectedCloudServer.value.name
     form.value.ipAddress = selectedCloudServer.value.publicIp || selectedCloudServer.value.privateIp || ''
     form.value.instanceType = selectedCloudServer.value.instanceType
     form.value.region = selectedCloudServer.value.region || selectedCloudServer.value.location || ''
     form.value.instanceId = selectedCloudServer.value.id // Store cloud provider instance ID
+    
+    // Extract security group ID (first security group if available)
+    if (selectedCloudServer.value.securityGroups && selectedCloudServer.value.securityGroups.length > 0) {
+      form.value.securityGroupId = selectedCloudServer.value.securityGroups[0].id
+    } else {
+      form.value.securityGroupId = ''
+    }
   }
 }
 
@@ -564,6 +583,7 @@ const closeModal = () => {
     instanceType: '',
     region: '',
     instanceId: '',
+    securityGroupId: '',
     operatingSystem: '',
     storageSize: 30
   }
@@ -589,7 +609,8 @@ const handleSubmit = async () => {
           ipAddress: form.value.ipAddress.trim() || null,
           instanceType: form.value.instanceType.trim() || null,
           region: form.value.region.trim() || null,
-          instanceId: form.value.instanceId.trim() || null // Pass cloud instance ID
+          instanceId: form.value.instanceId.trim() || null, // Pass cloud instance ID
+          securityGroupId: form.value.securityGroupId.trim() || null // Pass security group ID
         }
       : {
           cloudAccountId: parseInt(form.value.cloudAccountId),

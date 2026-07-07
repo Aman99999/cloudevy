@@ -21,6 +21,18 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: () => import('../views/ForgotPassword.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/reset-password',
+    name: 'ResetPassword',
+    component: () => import('../views/ResetPassword.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
     path: '/accept-invitation',
     name: 'AcceptInvitation',
     component: () => import('../views/AcceptInvitation.vue'),
@@ -44,9 +56,9 @@ const routes = [
         meta: { requiresAuth: true }
       },
       {
-        path: 'containers',
-        name: 'Containers',
-        component: () => import('../views/Containers.vue'),
+        path: 'clusters',
+        name: 'Clusters',
+        component: () => import('../views/Clusters.vue'),
         meta: { requiresAuth: true }
       },
       {
@@ -93,6 +105,21 @@ const routes = [
     }
   },
   {
+    path: '/clusters',
+    redirect: async (to) => {
+      const authStore = useAuthStore()
+      if (authStore.isAuthenticated && !authStore.user) {
+        await authStore.fetchCurrentUser()
+      }
+      const slug = authStore.user?.workspace?.slug
+      if (slug) {
+        return `/${slug}/clusters`
+      }
+      return '/login'
+    }
+  },
+  // Legacy redirect for old containers route
+  {
     path: '/containers',
     redirect: async (to) => {
       const authStore = useAuthStore()
@@ -101,7 +128,7 @@ const routes = [
       }
       const slug = authStore.user?.workspace?.slug
       if (slug) {
-        return `/${slug}/containers`
+        return `/${slug}/clusters`
       }
       return '/login'
     }

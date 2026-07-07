@@ -12,6 +12,12 @@ import schedulesRoutes from './routes/schedules.js';
 import teamRoutes from './routes/team.js';
 import costsRoutes from './routes/costs.js';
 import trafficRoutes from './routes/traffic.js';
+import clustersRoutes from './routes/clusters.js';
+import connectivityRoutes from './routes/connectivity.js';
+import securityGroupsRoutes from './routes/securityGroups.js';
+import hdfsRoutes from './routes/hdfs.js';
+import clusterValidatorRoutes from './routes/clusterValidator.js';
+import odpMatrixRoutes from './routes/odpMatrix.js';
 import { initializeWebSocketServer } from './services/websocketServer.js';
 
 dotenv.config();
@@ -65,6 +71,12 @@ app.use('/api/schedules', schedulesRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/costs', costsRoutes);
 app.use('/api/traffic', trafficRoutes);
+app.use('/api/clusters', clustersRoutes);
+app.use('/api/connectivity', connectivityRoutes);
+app.use('/api/security-groups', securityGroupsRoutes);
+app.use('/api/hdfs', hdfsRoutes);
+app.use('/api/cluster-validator', clusterValidatorRoutes);
+app.use('/api/odp-matrix', odpMatrixRoutes);
 
 // 404 handler
 app.use((req, res) => {

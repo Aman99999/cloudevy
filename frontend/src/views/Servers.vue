@@ -6,6 +6,23 @@
         <h1 class="text-3xl sm:text-4xl font-bold text-white mb-2">Servers</h1>
         <p class="text-gray-400">Manage your cloud infrastructure</p>
       </div>
+      <div class="flex items-center gap-3">
+        <button
+          @click="syncServers"
+          :disabled="syncing"
+          class="inline-flex items-center bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all hover:scale-105 shadow-lg shadow-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Sync servers from AWS to update IPs and status"
+        >
+          <svg 
+            :class="['w-5 h-5 mr-2', syncing ? 'animate-spin' : '']" 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          {{ syncing ? 'Syncing...' : 'Sync Servers' }}
+        </button>
       <button
         @click="showAddServerModal = true"
         class="inline-flex items-center bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-cyan-700 transition-all hover:scale-105 shadow-lg shadow-blue-500/30"
@@ -15,6 +32,7 @@
         </svg>
         Add Server
       </button>
+      </div>
     </div>
 
     <!-- Loading State -->
@@ -138,6 +156,21 @@
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+              </button>
+              <button
+                v-if="server.securityGroupId"
+                @click.stop="setupHDFSRules(server.id)"
+                :disabled="setupingRules[server.id]"
+                class="w-9 h-9 flex items-center justify-center rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 hover:text-orange-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Setup HDFS Security Rules"
+              >
+                <svg v-if="setupingRules[server.id]" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
                 </svg>
               </button>
               <button
@@ -332,6 +365,8 @@ const toast = useToast()
 const servers = ref([])
 const serverMetrics = ref({})
 const loading = ref(false)
+const syncing = ref(false)
+const setupingRules = ref({}) // Track setup status for each server
 const showAddServerModal = ref(false)
 const showDetailsModal = ref(false)
 const selectedServerId = ref(null)
@@ -402,6 +437,61 @@ const fetchServers = async () => {
     console.error('Failed to fetch servers:', error)
   } finally {
     loading.value = false
+  }
+}
+
+const setupHDFSRules = async (serverId) => {
+  const server = servers.value.find(s => s.id === serverId)
+  if (!server) return
+
+  setupingRules.value[serverId] = true
+  
+  try {
+    console.log(`🔐 Setting up HDFS security rules for ${server.name}...`)
+    toast.info(`Setting up HDFS security rules for ${server.name}...`)
+    
+    const response = await apiClient.post(`/security-groups/${serverId}/quick-actions/hdfs`)
+    
+    if (response.data.success) {
+      const { rulesAdded, errors } = response.data.data
+      
+      console.log(`✅ HDFS rules configured for ${server.name}:`, rulesAdded)
+      
+      if (errors && errors.length > 0) {
+        toast.warning(`Configured ${rulesAdded.length} rules with ${errors.length} warnings`)
+      } else {
+        toast.success(`✅ HDFS security rules configured! (${rulesAdded.length} rules)`)
+      }
+    }
+  } catch (error) {
+    console.error(`❌ Failed to setup HDFS rules for ${server.name}:`, error)
+    toast.error(error.response?.data?.message || 'Failed to configure HDFS security rules')
+  } finally {
+    setupingRules.value[serverId] = false
+  }
+}
+
+const syncServers = async () => {
+  syncing.value = true
+  try {
+    toast.info('Syncing servers from AWS...')
+    const response = await apiClient.post('/servers/sync')
+    
+    if (response.data.success) {
+      const results = response.data.data
+      const successCount = results.filter(r => r.success).length
+      const totalCount = results.length
+      
+      toast.success(`✅ Synced ${successCount} of ${totalCount} servers successfully`)
+      
+      // Refresh the server list
+      await fetchServers()
+    }
+  } catch (error) {
+    console.error('Failed to sync servers:', error)
+    toast.error(error.response?.data?.message || 'Failed to sync servers. Please try again.')
+  } finally {
+    syncing.value = false
   }
 }
 
@@ -610,7 +700,7 @@ const openScheduleModal = (server) => {
 
 const handleScheduleTypeSelected = (type) => {
   if (type === 'downtime') {
-    showScheduleModal.value = true
+  showScheduleModal.value = true
   } else if (type === 'scaling') {
     showConfigScalingModal.value = true
   }

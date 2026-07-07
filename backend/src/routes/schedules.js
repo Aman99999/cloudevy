@@ -204,7 +204,7 @@ router.post('/', async (req, res) => {
         return res.status(400).json({
           success: false,
           message: 'At least one target configuration (instance type or volume) is required for scaling actions'
-        });
+      });
       }
     }
 
@@ -280,14 +280,14 @@ router.post('/', async (req, res) => {
 
     // Create schedule
     const scheduleData = {
-      workspaceId,
-      serverId: parseInt(serverId),
-      name,
-      action,
-      rrule,
-      timezone,
-      nextRunAt,
-      enabled: true
+        workspaceId,
+        serverId: parseInt(serverId),
+        name,
+        action,
+        rrule,
+        timezone,
+        nextRunAt,
+        enabled: true
     };
 
     // Add instance type fields for scaling actions

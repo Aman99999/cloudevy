@@ -179,6 +179,23 @@
                 </div>
               </button>
               <button
+                @click="activeTab = 'ssh'"
+                :class="[
+                  'py-4 px-1 border-b-2 font-medium text-sm transition relative',
+                  activeTab === 'ssh'
+                    ? 'border-indigo-500 text-indigo-400'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
+                ]"
+              >
+                <div class="flex items-center space-x-2">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                  <span>SSH Config</span>
+                  <span v-if="sshStatus?.serverLevelConfigured" class="w-2 h-2 bg-green-400 rounded-full"></span>
+                </div>
+              </button>
+              <button
                 @click="activeTab = 'logs'"
                 :class="[
                   'py-4 px-1 border-b-2 font-medium text-sm transition relative',
@@ -193,6 +210,24 @@
                   </svg>
                   <span>Live Logs</span>
                   <span class="px-1.5 py-0.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[10px] font-bold rounded uppercase">New</span>
+                </div>
+              </button>
+              <button
+                v-if="serverData?.provider === 'aws' && serverData?.securityGroupId"
+                @click="activeTab = 'security'"
+                :class="[
+                  'py-4 px-1 border-b-2 font-medium text-sm transition relative',
+                  activeTab === 'security'
+                    ? 'border-indigo-500 text-indigo-400'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
+                ]"
+              >
+                <div class="flex items-center space-x-2">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.040A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <span>Security Group</span>
+                  <span class="px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-[10px] font-bold rounded uppercase">New</span>
                 </div>
               </button>
             </nav>
@@ -1403,8 +1438,8 @@
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                     <div>
-                      <div class="text-sm font-bold text-indigo-300">🐳 Docker Install (Recommended)</div>
-                      <div class="text-xs text-gray-400 mt-1">Run the agent as a Docker container with one command:</div>
+                      <div class="text-sm font-bold text-indigo-300">{{ selectedDistro === 'rhel-centos' ? '📦 Podman Install (Recommended)' : '🐳 Docker Install (Recommended)' }}</div>
+                      <div class="text-xs text-gray-400 mt-1">{{ selectedDistro === 'rhel-centos' ? 'Run the agent as a Podman container with one command:' : 'Run the agent as a Docker container with one command:' }}</div>
                     </div>
                   </div>
                   <div class="bg-gray-950/50 border border-gray-800 rounded-lg px-4 py-3 relative group">
@@ -1417,19 +1452,19 @@
                     </button>
                   </div>
                   <div class="mt-3 text-xs text-gray-500">
-                    <strong class="text-gray-400">Prerequisites:</strong> Docker must be installed on your server. 
-                    <a href="https://docs.docker.com/engine/install/" target="_blank" class="text-indigo-400 hover:text-indigo-300 underline">Install Docker →</a>
+                    <strong class="text-gray-400">Prerequisites:</strong> {{ selectedDistro === 'rhel-centos' ? 'Podman must be installed on your server.' : 'Docker must be installed on your server.' }} 
+                    <a v-if="selectedDistro !== 'rhel-centos'" href="https://docs.docker.com/engine/install/" target="_blank" class="text-indigo-400 hover:text-indigo-300 underline">Install Docker →</a>
                   </div>
                 </div>
                 
                 <div class="text-xs text-gray-500 text-center mb-4">Step-by-step guide:</div>
                 
                 <div class="space-y-4">
-                  <!-- Step 1: Install Docker -->
+                  <!-- Step 1: Install Docker/Podman -->
                   <div>
                     <div class="flex items-center space-x-2 mb-2">
                       <div class="w-6 h-6 bg-gray-700 rounded-full flex items-center justify-center text-white text-xs font-bold">1</div>
-                      <span class="text-sm font-semibold text-gray-300">Install Docker (if not already installed)</span>
+                      <span class="text-sm font-semibold text-gray-300">{{ selectedDistro === 'rhel-centos' ? 'Install Podman (if not already installed)' : 'Install Docker (if not already installed)' }}</span>
                     </div>
                     <div class="ml-8 bg-gray-950/50 border border-gray-800 rounded-lg px-4 py-3 relative group">
                       <code class="text-green-400 font-mono text-sm whitespace-pre-wrap">{{ dockerInstallCommand }}</code>
@@ -1675,10 +1710,196 @@
 
             </div><!-- End Agent Setup Tab Content -->
 
+            <!-- SSH Config Tab -->
+            <div v-else-if="activeTab === 'ssh'" class="space-y-6">
+              <div class="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-xl p-6">
+                <h3 class="text-xl font-bold text-white mb-3 flex items-center">
+                  <svg class="w-6 h-6 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                  Per-Server SSH Configuration
+                </h3>
+                <p class="text-gray-300 text-sm mb-4">
+                  Configure SSH credentials specific to this server. Server-level credentials override cloud account-level credentials.
+                </p>
+                
+                <!-- Status Card -->
+                <div v-if="sshStatus" class="bg-gray-800/50 rounded-lg p-4 mb-4">
+                  <div class="space-y-2 text-sm">
+                    <div class="flex items-center justify-between">
+                      <span class="text-gray-400">Server-Level SSH:</span>
+                      <span :class="sshStatus.serverLevelConfigured ? 'text-green-400' : 'text-gray-500'">
+                        {{ sshStatus.serverLevelConfigured ? '✅ Configured' : '❌ Not Configured' }}
+                      </span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <span class="text-gray-400">Cloud Account SSH:</span>
+                      <span :class="sshStatus.cloudAccountLevelConfigured ? 'text-green-400' : 'text-gray-500'">
+                        {{ sshStatus.cloudAccountLevelConfigured ? '✅ Configured' : '❌ Not Configured' }}
+                      </span>
+                    </div>
+                    <div class="flex items-center justify-between pt-2 border-t border-gray-700">
+                      <span class="text-gray-300 font-medium">Active Source:</span>
+                      <span class="text-white font-bold">
+                        {{ sshStatus.activeSource === 'server' ? '🔐 Server' : sshStatus.activeSource === 'cloud-account' ? '☁️ Cloud Account' : '⚠️ None' }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Configure/Update SSH Form -->
+                <div v-if="!sshConfigured || showSSHForm" class="space-y-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                      SSH Username
+                    </label>
+                    <input
+                      v-model="sshForm.username"
+                      type="text"
+                      class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500"
+                      placeholder="ec2-user"
+                    />
+                    <p class="text-xs text-gray-400 mt-1">Common: ec2-user (Amazon Linux), ubuntu (Ubuntu), root (others)</p>
+                  </div>
+
+                  <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                      SSH Port
+                    </label>
+                    <input
+                      v-model.number="sshForm.port"
+                      type="number"
+                      class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500"
+                      placeholder="22"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                      Private Key (.pem file)
+                    </label>
+                    <div class="space-y-3">
+                      <button
+                        @click="$refs.sshFileInput.click()"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-medium transition flex items-center justify-center space-x-2"
+                      >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <span>Upload Private Key</span>
+                      </button>
+                      <input
+                        ref="sshFileInput"
+                        type="file"
+                        accept=".pem,.key"
+                        @change="handleSSHKeyUpload"
+                        class="hidden"
+                      />
+                      <p v-if="sshForm.privateKey" class="text-green-400 text-sm flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Key loaded ({{ sshForm.privateKey.length }} bytes)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="flex space-x-3">
+                    <button
+                      @click="saveServerSSH"
+                      :disabled="!canSaveSSH"
+                      class="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-3 rounded-lg font-medium transition"
+                    >
+                      {{ sshConfigured ? 'Update' : 'Save' }} SSH Config
+                    </button>
+                    <button
+                      v-if="sshConfigured && showSSHForm"
+                      @click="cancelSSHForm"
+                      class="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Configured State -->
+                <div v-else class="space-y-4">
+                  <div class="flex space-x-3">
+                    <button
+                      @click="showSSHForm = true"
+                      class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-medium transition"
+                    >
+                      Update SSH Config
+                    </button>
+                    <button
+                      @click="removeServerSSH"
+                      class="px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition"
+                    >
+                      Remove (Use Cloud Account SSH)
+                    </button>
+                  </div>
+                  <p class="text-xs text-gray-400 text-center">
+                    Last configured: {{ sshStatus?.configuredAt ? new Date(sshStatus.configuredAt).toLocaleString() : 'Unknown' }}
+                  </p>
+                </div>
+              </div>
+
+              <!-- Help Section -->
+              <div class="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
+                <h4 class="text-purple-400 font-bold mb-2">💡 When to Use Server-Level SSH?</h4>
+                <ul class="text-sm text-gray-300 space-y-1">
+                  <li class="flex items-start">
+                    <span class="text-purple-400 mr-2">•</span>
+                    <span>Servers using <strong class="text-white">different SSH key pairs</strong> in the same cloud account</span>
+                  </li>
+                  <li class="flex items-start">
+                    <span class="text-purple-400 mr-2">•</span>
+                    <span>Better security through <strong class="text-white">unique credentials per server</strong></span>
+                  </li>
+                  <li class="flex items-start">
+                    <span class="text-purple-400 mr-2">•</span>
+                    <span>Easier <strong class="text-white">key rotation</strong> without affecting other servers</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- Remove Cloud Account SSH (Advanced) -->
+              <div v-if="sshStatus?.cloudAccountLevelConfigured" class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                <h4 class="text-yellow-400 font-bold mb-2 flex items-center">
+                  <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  Advanced: Remove Cloud Account SSH
+                </h4>
+                <p class="text-sm text-gray-300 mb-3">
+                  This cloud account has SSH credentials that are shared by ALL servers. 
+                  If you want to use <strong class="text-white">only per-server SSH</strong>, you can remove the cloud account SSH.
+                </p>
+                <button
+                  @click="removeCloudAccountSSH"
+                  class="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-lg font-medium transition flex items-center justify-center space-x-2"
+                >
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Remove Cloud Account SSH Credentials</span>
+                </button>
+                <p class="text-xs text-gray-400 mt-2">
+                  ⚠️ This affects ALL servers in this cloud account. Make sure each server has its own SSH credentials configured first!
+                </p>
+              </div>
+            </div><!-- End SSH Config Tab -->
+
             <!-- Live Logs Tab -->
             <ServerLogsTab 
               v-else-if="activeTab === 'logs' && serverData"
               :server="serverData"
+            />
+
+            <!-- Security Group Tab -->
+            <SecurityGroupPanel
+              v-else-if="activeTab === 'security' && serverData"
+              :serverId="serverData.id"
             />
 
           </div><!-- End Scrollable Content -->
@@ -1733,6 +1954,7 @@ import apiClient from '@/api/client'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import TrafficInsights from '@/components/TrafficInsights.vue'
 import ServerLogsTab from '@/components/ServerLogsTab.vue'
+import SecurityGroupPanel from '@/components/SecurityGroupPanel.vue'
 import { useToast } from '@/composables/useToast'
 
 // Register Chart.js components
@@ -1811,6 +2033,21 @@ const loadCostTrackingPreference = () => {
 // Traffic Insights state
 const trafficPatterns = ref({ success: false })
 const trafficLoading = ref(false)
+
+// SSH Config state
+const sshStatus = ref(null)
+const sshConfigured = ref(false)
+const showSSHForm = ref(false)
+const sshForm = ref({
+  username: 'ec2-user',
+  port: 22,
+  privateKey: ''
+})
+const sshFileInput = ref(null)
+
+const canSaveSSH = computed(() => {
+  return sshForm.value.username && sshForm.value.privateKey && sshForm.value.port
+})
 const trafficError = ref(null)
 
 // Confirm dialog state
@@ -2268,18 +2505,24 @@ const apiUrl = computed(() => {
 const installCommand = computed(() => {
   if (!serverData.value) return ''
   
-  // Docker-based agent installation (recommended)
-  return `sudo docker run -d \\
+  const distro = selectedDistro.value
+  const isRHEL = distro === 'rhel-centos'
+  const containerCmd = isRHEL ? 'podman' : 'docker'
+  const socketPath = isRHEL ? '' : '-v /var/run/docker.sock:/var/run/docker.sock:ro \\'
+  const imagePrefix = isRHEL ? 'docker.io/' : ''
+  
+  // Container-based agent installation (Docker for most, Podman for RHEL)
+  return `sudo ${containerCmd} run -d \\
   --name cloudevy-agent \\
   --restart unless-stopped \\
   --pid=host \\
   --network=host \\
   -v /:/host:ro \\
-  -v /var/run/docker.sock:/var/run/docker.sock:ro \\
+  ${socketPath}
   -e CLOUDEVY_SERVER_ID=${serverData.value.id} \\
   -e CLOUDEVY_API_KEY=${serverData.value.apiKey} \\
   -e CLOUDEVY_API_URL=${apiUrl.value} \\
-  cloudevy/cloudevy-agent:latest`
+  ${imagePrefix}cloudevy/cloudevy-agent:latest`.replace(/\n\s*\n/g, '\n')
 })
 
 const dockerInstallCommand = computed(() => {
@@ -2300,10 +2543,13 @@ sudo systemctl enable docker
 sudo usermod -aG docker $USER`,
     
     'rhel-centos': `# RHEL / CentOS / Rocky Linux
-sudo yum install -y docker
-sudo systemctl start docker
-sudo systemctl enable docker
-sudo usermod -aG docker $USER`,
+# Install Podman (native container runtime for RHEL)
+sudo yum install -y podman
+
+# Enable Podman socket (for Docker compatibility)
+sudo systemctl enable --now podman.socket
+
+# Note: Use 'podman' instead of 'docker' in commands below`,
     
     'fedora': `# Fedora
 sudo dnf install -y docker
@@ -2786,6 +3032,135 @@ function copyIAMPolicy() {
 function retryFetchCosts() {
   fetchCostData()
 }
+
+// SSH Configuration Functions
+async function fetchSSHStatus() {
+  if (!props.serverId) return
+
+  try {
+    const response = await apiClient.get(`/servers/${props.serverId}/ssh/status`)
+    if (response.data.success) {
+      sshStatus.value = response.data
+      // Consider SSH configured if EITHER server-level OR cloud-account-level is set
+      sshConfigured.value = response.data.serverLevelConfigured || response.data.cloudAccountLevelConfigured
+      
+      // Pre-fill form with current credentials
+      sshForm.value.username = response.data.sshUsername || 'ec2-user'
+      sshForm.value.port = response.data.sshPort || 22
+    }
+  } catch (error) {
+    console.error('Failed to fetch SSH status:', error)
+  }
+}
+
+function handleSSHKeyUpload(event) {
+  const file = event.target.files[0]
+  if (file) {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      sshForm.value.privateKey = e.target.result
+    }
+    reader.readAsText(file)
+  }
+}
+
+async function saveServerSSH() {
+  if (!canSaveSSH.value) return
+
+  try {
+    const response = await apiClient.put(`/servers/${props.serverId}/ssh`, {
+      sshPrivateKey: sshForm.value.privateKey,
+      sshUsername: sshForm.value.username,
+      sshPort: sshForm.value.port
+    })
+
+    if (response.data.success) {
+      toast.success('SSH credentials configured successfully!')
+      await fetchSSHStatus()
+      showSSHForm.value = false
+      sshForm.value.privateKey = '' // Clear private key from memory
+    }
+  } catch (error) {
+    console.error('Failed to save SSH credentials:', error)
+    toast.error(error.response?.data?.message || 'Failed to save SSH credentials')
+  }
+}
+
+async function removeServerSSH() {
+  if (!confirm('Remove server-level SSH credentials? The system will fall back to cloud account-level credentials.')) {
+    return
+  }
+
+  try {
+    const response = await apiClient.delete(`/servers/${props.serverId}/ssh`)
+    
+    if (response.data.success) {
+      toast.success('Server SSH credentials removed')
+      
+      // Refresh status to update UI
+      await fetchSSHStatus()
+      
+      // Reset form
+      sshForm.value = {
+        username: 'ec2-user',
+        port: 22,
+        privateKey: ''
+      }
+      
+      // Hide the form if it was showing
+      showSSHForm.value = false
+    }
+  } catch (error) {
+    console.error('Failed to remove SSH credentials:', error)
+    toast.error(error.response?.data?.message || 'Failed to remove SSH credentials')
+  }
+}
+
+function cancelSSHForm() {
+  showSSHForm.value = false
+  sshForm.value.privateKey = ''
+  if (sshStatus.value) {
+    sshForm.value.username = sshStatus.value.sshUsername || 'ec2-user'
+    sshForm.value.port = sshStatus.value.sshPort || 22
+  }
+}
+
+async function removeCloudAccountSSH() {
+  if (!serverData.value?.cloudAccountId) {
+    toast.error('No cloud account associated with this server')
+    return
+  }
+
+  const confirmed = confirm(
+    '⚠️ WARNING: This will remove SSH credentials for the ENTIRE cloud account!\n\n' +
+    'ALL servers in this cloud account will be affected.\n\n' +
+    'Make sure each server has its own SSH credentials configured first.\n\n' +
+    'Continue?'
+  )
+  
+  if (!confirmed) return
+
+  try {
+    const response = await apiClient.delete(`/cloud-accounts/${serverData.value.cloudAccountId}/ssh`)
+    
+    if (response.data.success) {
+      toast.success('Cloud account SSH credentials removed successfully')
+      
+      // Refresh SSH status
+      await fetchSSHStatus()
+    }
+  } catch (error) {
+    console.error('Failed to remove cloud account SSH:', error)
+    toast.error(error.response?.data?.message || 'Failed to remove cloud account SSH credentials')
+  }
+}
+
+// Fetch SSH status when tab is activated
+watch(activeTab, (newTab) => {
+  if (newTab === 'ssh') {
+    fetchSSHStatus()
+  }
+})
 
 </script>
 

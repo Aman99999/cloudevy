@@ -132,15 +132,131 @@ If you didn't expect this invitation, you can safely ignore this email.
   }
 
   /**
-   * Test email connection
+   * Send password reset email
    */
-  async testConnection() {
+  async sendPasswordReset({ to, resetToken, userName }) {
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:8001'}/reset-password?token=${resetToken}`;
+
+    const mailOptions = {
+      from: `"CloudEvy" <${process.env.GMAIL_USER}>`,
+      to,
+      subject: 'Reset Your CloudEvy Password',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f172a;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; padding: 40px 20px;">
+            <tr>
+              <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #1e293b; border-radius: 16px; overflow: hidden;">
+                  <!-- Header -->
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 40px; text-align: center;">
+                      <h1 style="margin: 0; color: white; font-size: 28px; font-weight: bold;">
+                        ☁️ CloudEvy
+                      </h1>
+                    </td>
+                  </tr>
+                  
+                  <!-- Content -->
+                  <tr>
+                    <td style="padding: 40px;">
+                      <h2 style="margin: 0 0 20px 0; color: #f1f5f9; font-size: 24px;">
+                        Password Reset Request 🔐
+                      </h2>
+                      
+                      <p style="margin: 0 0 16px 0; color: #cbd5e1; font-size: 16px; line-height: 1.6;">
+                        Hi ${userName || 'there'},
+                      </p>
+                      
+                      <p style="margin: 0 0 16px 0; color: #cbd5e1; font-size: 16px; line-height: 1.6;">
+                        We received a request to reset your password for your CloudEvy account. Click the button below to reset your password:
+                      </p>
+                      
+                      <!-- CTA Button -->
+                      <table width="100%" cellpadding="0" cellspacing="0" style="margin: 32px 0;">
+                        <tr>
+                          <td align="center">
+                            <a href="${resetLink}" 
+                               style="display: inline-block; padding: 16px 32px; background-color: #3b82f6; color: white; 
+                                      text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                              Reset Password →
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+                      
+                      <p style="margin: 32px 0 0 0; padding-top: 32px; border-top: 1px solid #334155; color: #94a3b8; font-size: 14px; line-height: 1.6;">
+                        Or copy and paste this link into your browser:<br>
+                        <a href="${resetLink}" style="color: #3b82f6; word-break: break-all;">${resetLink}</a>
+                      </p>
+                      
+                      <p style="margin: 16px 0 0 0; color: #64748b; font-size: 12px;">
+                        This link will expire in 1 hour. If you didn't request a password reset, you can safely ignore this email.
+                      </p>
+                    </td>
+                  </tr>
+                  
+                  <!-- Footer -->
+                  <tr>
+                    <td style="background-color: #0f172a; padding: 24px; text-align: center; border-top: 1px solid #334155;">
+                      <p style="margin: 0; color: #64748b; font-size: 12px;">
+                        © ${new Date().getFullYear()} CloudEvy. All rights reserved.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `,
+      text: `
+Reset Your CloudEvy Password
+
+Hi ${userName || 'there'},
+
+We received a request to reset your password for your CloudEvy account.
+
+Click this link to reset your password:
+${resetLink}
+
+This link will expire in 1 hour. If you didn't request a password reset, you can safely ignore this email.
+
+© ${new Date().getFullYear()} CloudEvy
+      `.trim()
+    };
+
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log('✅ Password reset email sent:', info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('❌ Failed to send password reset email:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Test email connection
+   * @param {boolean} silent - If true, don't log success message
+   */
+  async testConnection(silent = false) {
     try {
       await this.transporter.verify();
-      console.log('✅ Email service is ready');
+      if (!silent) {
+        console.log('✅ Email service is ready');
+      }
       return true;
     } catch (error) {
-      console.error('❌ Email service connection failed:', error);
+      if (!silent) {
+        console.error('❌ Email service connection failed:', error);
+      }
       return false;
     }
   }

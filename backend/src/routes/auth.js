@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
+import axios from 'axios';
 import { authenticate } from '../middleware/auth.js';
 import prisma from '../config/prisma.js';
 import { slugify } from '../utils/slugify.js';
@@ -430,6 +431,57 @@ router.post('/signup-invited', async (req, res) => {
       success: false,
       message: 'Failed to create account'
     });
+  }
+});
+
+// User Management Service URL
+const USER_MGMT_URL = process.env.USER_MGMT_URL || 'http://user-management:8004';
+
+/**
+ * POST /api/auth/forgot-password
+ * Request password reset (proxied to user-management service)
+ */
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const response = await axios.post(
+      `${USER_MGMT_URL}/api/password-reset/forgot`,
+      req.body,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    console.error('Forgot password proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { success: false, message: 'Service unavailable' }
+    );
+  }
+});
+
+/**
+ * POST /api/auth/reset-password
+ * Reset password with token (proxied to user-management service)
+ */
+router.post('/reset-password', async (req, res) => {
+  try {
+    const response = await axios.post(
+      `${USER_MGMT_URL}/api/password-reset/reset`,
+      req.body,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    console.error('Reset password proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { success: false, message: 'Service unavailable' }
+    );
   }
 });
 

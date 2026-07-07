@@ -682,12 +682,14 @@ function handleFileDrop(event) {
 async function checkSSHStatus() {
   try {
     const response = await apiClient.get(
-      `/cloud-accounts/${props.server.cloudAccountId}/ssh/status`
+      `/servers/${props.server.id}/ssh/status`
     );
     
     if (response.data.success) {
-      sshConfigured.value = response.data.configured;
-      if (response.data.configured) {
+      // Check if either server-level or cloud-account-level SSH is configured
+      sshConfigured.value = response.data.serverLevelConfigured || response.data.cloudAccountLevelConfigured;
+      
+      if (sshConfigured.value) {
         sshForm.value.username = response.data.sshUsername || 'ec2-user';
         sshForm.value.port = response.data.sshPort || 22;
       }
@@ -702,7 +704,7 @@ async function saveSSHCredentials() {
   saving.value = true;
   try {
     const response = await apiClient.put(
-      `/cloud-accounts/${props.server.cloudAccountId}/ssh`,
+      `/servers/${props.server.id}/ssh`,
       {
         sshPrivateKey: sshForm.value.privateKey,
         sshUsername: sshForm.value.username,
@@ -726,18 +728,19 @@ async function saveSSHCredentials() {
 
 // Remove SSH credentials
 async function removeSSHCredentials() {
-  if (!confirm('Are you sure you want to remove SSH credentials? This will disable log streaming.')) {
+  if (!confirm('Remove SSH credentials for this server? Will fall back to cloud account credentials if configured.')) {
     return;
   }
   
   try {
     const response = await apiClient.delete(
-      `/cloud-accounts/${props.server.cloudAccountId}/ssh`
+      `/servers/${props.server.id}/ssh`
     );
     
     if (response.data.success) {
-      sshConfigured.value = false;
-      streamStatus.value = { type: 'success', message: 'SSH credentials removed successfully' };
+      // Check if cloud account has SSH configured
+      await checkSSHStatus();
+      streamStatus.value = { type: 'success', message: response.data.message };
     }
   } catch (error) {
     console.error('Error removing SSH credentials:', error);

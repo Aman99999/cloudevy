@@ -46,3 +46,6 @@ push-images.sh
 # ⚠️  Prevent duplicate Prisma directories
 downtime-scheduler/prisma/
 
+# Build artifacts (too large for GitHub's 100MB limit)
+*.tar.gz
+

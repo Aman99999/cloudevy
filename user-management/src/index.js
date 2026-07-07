@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import invitationsRoutes from './routes/invitations.js';
+import passwordResetRoutes from './routes/passwordReset.js';
 import emailService from './services/email.js';
 
 dotenv.config();
@@ -19,7 +20,7 @@ app.use(express.json());
 
 // Health check
 app.get('/health', async (req, res) => {
-  const emailReady = await emailService.testConnection();
+  const emailReady = await emailService.testConnection(true); // silent mode
   
   res.json({
     status: 'ok',
@@ -30,6 +31,7 @@ app.get('/health', async (req, res) => {
 
 // Routes
 app.use('/api/invitations', invitationsRoutes);
+app.use('/api/password-reset', passwordResetRoutes);
 
 // 404 handler
 app.use((req, res) => {

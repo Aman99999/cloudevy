@@ -1,14 +1,38 @@
 /**
- * WebSocket Server for Real-Time Log Streaming
- * Handles WebSocket connections and SSH log streaming
+ * WebSocket Server for Real-Time Log Streaming and Cluster Creation Progress
+ * Handles WebSocket connections for SSH log streaming and cluster creation updates
  */
 
 import { WebSocketServer } from 'ws';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/prisma.js';
-import { streamManager, decryptSSHKey, LOG_SOURCES } from '../services/sshLogStreamer.js';
+import { streamManager, LOG_SOURCES } from '../services/sshLogStreamer.js';
+import { getServerSSHCredentials } from '../services/sshResolver.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+
+// Store active WebSocket connections for cluster creation
+const clusterProgressConnections = new Map(); // clusterId -> Set of WebSocket connections
+
+/**
+ * Send cluster creation progress to all connected clients
+ */
+export function sendClusterProgress(clusterId, progress) {
+  const connections = clusterProgressConnections.get(clusterId);
+  if (connections && connections.size > 0) {
+    const message = JSON.stringify({
+      type: 'cluster_progress',
+      clusterId,
+      progress
+    });
+    
+    connections.forEach(ws => {
+      if (ws.readyState === 1) { // WebSocket.OPEN
+        ws.send(message);
+      }
+    });
+  }
+}
 
 /**
  * Initialize WebSocket server
@@ -81,49 +105,8 @@ export function initializeWebSocketServer(server) {
           }
 
           try {
-            // Get server details
-            const server = await prisma.server.findFirst({
-              where: {
-                id: parseInt(serverId),
-                workspaceId
-              },
-              include: {
-                cloudAccount: {
-                  select: {
-                    sshPrivateKey: true,
-                    sshUsername: true,
-                    sshPort: true
-                  }
-                }
-              }
-            });
-
-            if (!server) {
-              ws.send(JSON.stringify({ 
-                type: 'error', 
-                message: 'Server not found' 
-              }));
-              return;
-            }
-
-            if (!server.cloudAccount?.sshPrivateKey) {
-              ws.send(JSON.stringify({ 
-                type: 'error', 
-                message: 'SSH credentials not configured for this cloud account' 
-              }));
-              return;
-            }
-
-            if (!server.ipAddress && !server.instanceId) {
-              ws.send(JSON.stringify({ 
-                type: 'error', 
-                message: 'Server has no IP address' 
-              }));
-              return;
-            }
-
-            // Decrypt SSH key
-            const privateKey = decryptSSHKey(server.cloudAccount.sshPrivateKey);
+            // Get server with SSH credentials using new resolver
+            const sshCredentials = await getServerSSHCredentials(parseInt(serverId), workspaceId);
             
             // Create unique session ID
             sessionId = `${workspaceId}-${serverId}-${Date.now()}`;
@@ -132,45 +115,46 @@ export function initializeWebSocketServer(server) {
             await streamManager.createStream(
               sessionId,
               {
-                host: server.ipAddress,
-                port: server.cloudAccount.sshPort || 22,
-                username: server.cloudAccount.sshUsername || 'ec2-user',
-                privateKey: privateKey,
+                host: sshCredentials.host,
+                port: sshCredentials.port,
+                username: sshCredentials.username,
+                privateKey: sshCredentials.privateKey,
                 onData: (data) => {
                   // Send log data to client
                   if (ws.readyState === ws.OPEN) {
-                    ws.send(JSON.stringify({ 
-                      type: 'log_data', 
-                      data 
+                    ws.send(JSON.stringify({
+                      type: 'log_data',
+                      data
                     }));
                   }
                 },
                 onError: (error) => {
-                  ws.send(JSON.stringify({ 
-                    type: 'stream_error', 
-                    message: error.message 
+                  ws.send(JSON.stringify({
+                    type: 'stream_error',
+                    message: error.message
                   }));
                 },
                 onClose: () => {
-                  ws.send(JSON.stringify({ 
-                    type: 'stream_closed', 
-                    message: 'SSH connection closed' 
+                  ws.send(JSON.stringify({
+                    type: 'stream_closed',
+                    message: 'SSH connection closed'
                   }));
                 }
               },
               logSource
             );
 
-            ws.send(JSON.stringify({ 
-              type: 'stream_started', 
+            ws.send(JSON.stringify({
+              type: 'stream_started',
               message: `Streaming ${LOG_SOURCES[logSource]?.label || logSource}`,
-              logSource 
+              logSource,
+              sshSource: sshCredentials.source // Tell client where SSH creds came from
             }));
 
           } catch (error) {
-            ws.send(JSON.stringify({ 
-              type: 'error', 
-              message: `Failed to start stream: ${error.message}` 
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `Failed to start stream: ${error.message}`
             }));
           }
           return;
@@ -200,6 +184,48 @@ export function initializeWebSocketServer(server) {
           return;
         }
 
+        // Handle cluster progress subscription
+        if (message.type === 'subscribe_cluster') {
+          const { clusterId } = message;
+          
+          if (!clusterId) {
+            ws.send(JSON.stringify({ 
+              type: 'error', 
+              message: 'clusterId is required' 
+            }));
+            return;
+          }
+
+          // Verify cluster belongs to user's workspace
+          const cluster = await prisma.cluster.findFirst({
+            where: {
+              id: parseInt(clusterId),
+              workspaceId
+            }
+          });
+
+          if (!cluster) {
+            ws.send(JSON.stringify({ 
+              type: 'error', 
+              message: 'Cluster not found' 
+            }));
+            return;
+          }
+
+          // Add connection to cluster progress subscribers
+          if (!clusterProgressConnections.has(clusterId)) {
+            clusterProgressConnections.set(clusterId, new Set());
+          }
+          clusterProgressConnections.get(clusterId).add(ws);
+
+          ws.send(JSON.stringify({ 
+            type: 'subscribed', 
+            clusterId,
+            message: 'Subscribed to cluster progress' 
+          }));
+          return;
+        }
+
       } catch (error) {
         ws.send(JSON.stringify({ 
           type: 'error', 
@@ -213,6 +239,14 @@ export function initializeWebSocketServer(server) {
       if (sessionId) {
         streamManager.stopStream(sessionId);
       }
+      
+      // Clean up cluster progress subscriptions
+      clusterProgressConnections.forEach((connections, clusterId) => {
+        connections.delete(ws);
+        if (connections.size === 0) {
+          clusterProgressConnections.delete(clusterId);
+        }
+      });
     });
 
     ws.on('error', (error) => {
