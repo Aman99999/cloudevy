@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth.js';
 import prisma from '../config/prisma.js';
 import crypto from 'crypto';
 import { EC2Client, DescribeInstancesCommand } from '@aws-sdk/client-ec2';
+import { encryptSSHKey, decryptSSHKey } from '../services/sshLogStreamer.js';
 
 const router = express.Router();
 
@@ -321,6 +322,19 @@ async function fetchAWSServers(credentials, region) {
           const nameTag = instance.Tags?.find(tag => tag.Key === 'Name');
           const name = nameTag?.Value || instance.InstanceId;
           
+          // Determine platform
+          let platform = instance.PlatformDetails || 'Linux/UNIX';
+          // Simplify platform name for better display
+          if (platform.includes('Windows')) {
+            platform = 'Windows';
+          } else if (platform.includes('Red Hat')) {
+            platform = 'Red Hat Linux';
+          } else if (platform.includes('SUSE')) {
+            platform = 'SUSE Linux';
+          } else if (platform.includes('Linux')) {
+            platform = 'Linux';
+          }
+          
           servers.push({
             id: instance.InstanceId,
             name: name,
@@ -330,7 +344,8 @@ async function fetchAWSServers(credentials, region) {
             privateIp: instance.PrivateIpAddress || null,
             region: region || 'us-east-1',
             availabilityZone: instance.Placement?.AvailabilityZone || null,
-            launchTime: instance.LaunchTime?.toISOString() || null
+            launchTime: instance.LaunchTime?.toISOString() || null,
+            platform: platform
           });
         }
       }
@@ -384,5 +399,168 @@ async function fetchGCPServers(credentials) {
   // const [instances] = await client.aggregatedList({ project: projectId });
 }
 
-export default router;
+/**
+ * PUT /api/cloud-accounts/:id/ssh
+ * Update SSH credentials for log streaming
+ */
+router.put('/:id/ssh',
+  body('sshPrivateKey').notEmpty().withMessage('SSH private key is required'),
+  body('sshUsername').optional().isString(),
+  body('sshPort').optional().isInt({ min: 1, max: 65535 }),
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+      }
 
+      const { id } = req.params;
+      const { sshPrivateKey, sshUsername, sshPort } = req.body;
+      const workspaceId = req.user.workspaceId;
+
+      // Verify cloud account exists and belongs to user's workspace
+      const cloudAccount = await prisma.cloudAccount.findFirst({
+        where: {
+          id: parseInt(id),
+          workspaceId
+        }
+      });
+
+      if (!cloudAccount) {
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Cloud account not found' 
+        });
+      }
+
+      // Encrypt SSH private key
+      const encryptedKey = encryptSSHKey(sshPrivateKey);
+
+      // Update cloud account with SSH credentials
+      const updated = await prisma.cloudAccount.update({
+        where: { id: parseInt(id) },
+        data: {
+          sshPrivateKey: encryptedKey,
+          sshUsername: sshUsername || 'ec2-user',
+          sshPort: sshPort || 22
+        },
+        select: {
+          id: true,
+          accountName: true,
+          sshUsername: true,
+          sshPort: true,
+          updatedAt: true
+        }
+      });
+
+      res.json({
+        success: true,
+        message: 'SSH credentials updated successfully',
+        cloudAccount: updated
+      });
+    } catch (error) {
+      console.error('Error updating SSH credentials:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to update SSH credentials',
+        error: error.message 
+      });
+    }
+  }
+);
+
+/**
+ * DELETE /api/cloud-accounts/:id/ssh
+ * Remove SSH credentials
+ */
+router.delete('/:id/ssh', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const workspaceId = req.user.workspaceId;
+
+    // Verify cloud account exists and belongs to user's workspace
+    const cloudAccount = await prisma.cloudAccount.findFirst({
+      where: {
+        id: parseInt(id),
+        workspaceId
+      }
+    });
+
+    if (!cloudAccount) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Cloud account not found' 
+      });
+    }
+
+    // Remove SSH credentials
+    await prisma.cloudAccount.update({
+      where: { id: parseInt(id) },
+      data: {
+        sshPrivateKey: null,
+        sshUsername: null,
+        sshPort: null
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'SSH credentials removed successfully'
+    });
+  } catch (error) {
+    console.error('Error removing SSH credentials:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to remove SSH credentials',
+      error: error.message 
+    });
+  }
+});
+
+/**
+ * GET /api/cloud-accounts/:id/ssh/status
+ * Check if SSH credentials are configured
+ */
+router.get('/:id/ssh/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const workspaceId = req.user.workspaceId;
+
+    const cloudAccount = await prisma.cloudAccount.findFirst({
+      where: {
+        id: parseInt(id),
+        workspaceId
+      },
+      select: {
+        id: true,
+        accountName: true,
+        sshPrivateKey: true,
+        sshUsername: true,
+        sshPort: true
+      }
+    });
+
+    if (!cloudAccount) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Cloud account not found' 
+      });
+    }
+
+    res.json({
+      success: true,
+      configured: !!cloudAccount.sshPrivateKey,
+      sshUsername: cloudAccount.sshUsername,
+      sshPort: cloudAccount.sshPort || 22
+    });
+  } catch (error) {
+    console.error('Error checking SSH status:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to check SSH status',
+      error: error.message 
+    });
+  }
+});
+
+export default router;

@@ -74,6 +74,123 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * POST /api/servers/sync
+ * Sync all AWS servers' details (status, platform, IP) from AWS
+ */
+router.post('/sync', async (req, res) => {
+  try {
+    const workspaceId = req.user.workspaceId;
+
+    // Get all AWS servers with cloud accounts
+    const servers = await prisma.server.findMany({
+      where: { 
+        workspaceId,
+        provider: 'aws',
+        instanceId: { not: null }
+      },
+      include: {
+        cloudAccount: true
+      }
+    });
+
+    const syncResults = [];
+
+    for (const server of servers) {
+      try {
+        // Decrypt credentials
+        const credentials = JSON.parse(decryptCredentials(server.cloudAccount.credentials));
+
+        // Create EC2 client
+        const client = new EC2Client({
+          region: server.region || 'us-east-1',
+          credentials: {
+            accessKeyId: credentials.accessKey,
+            secretAccessKey: credentials.secretKey
+          }
+        });
+
+        // Get instance details from AWS
+        const command = new DescribeInstancesCommand({
+          InstanceIds: [server.instanceId]
+        });
+
+        const response = await client.send(command);
+        
+        if (response.Reservations && response.Reservations.length > 0) {
+          const instance = response.Reservations[0].Instances[0];
+          const status = instance.State?.Name || 'unknown';
+
+          // Determine platform
+          let platform = instance.PlatformDetails || 'Linux/UNIX';
+          if (platform.includes('Windows')) {
+            platform = 'Windows';
+          } else if (platform.includes('Red Hat')) {
+            platform = 'Red Hat Linux';
+          } else if (platform.includes('SUSE')) {
+            platform = 'SUSE Linux';
+          } else if (platform.includes('Linux')) {
+            platform = 'Linux';
+          }
+
+          // Extract security group ID (first security group)
+          let securityGroupId = server.securityGroupId; // Keep existing if no SG found
+          if (instance.SecurityGroups && instance.SecurityGroups.length > 0) {
+            securityGroupId = instance.SecurityGroups[0].GroupId;
+          }
+
+          // Extract VPC ID and Subnet ID
+          const vpcId = instance.VpcId || null;
+          const subnetId = instance.SubnetId || null;
+
+          // Update server in database
+          await prisma.server.update({
+            where: { id: server.id },
+            data: {
+              status,
+              platform,
+              ipAddress: instance.PublicIpAddress || server.ipAddress,
+              privateIpAddress: instance.PrivateIpAddress || server.privateIpAddress,
+              securityGroupId: securityGroupId,
+              vpcId: vpcId,
+              subnetId: subnetId
+            }
+          });
+
+          syncResults.push({
+            serverId: server.id,
+            serverName: server.name,
+            success: true,
+            status,
+            platform,
+            securityGroupId
+          });
+        }
+      } catch (error) {
+        syncResults.push({
+          serverId: server.id,
+          serverName: server.name,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Synced ${syncResults.filter(r => r.success).length} of ${servers.length} servers`,
+      data: syncResults
+    });
+
+  } catch (error) {
+    console.error('Sync servers error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to sync servers'
+    });
+  }
+});
+
+/**
  * POST /api/servers
  * Add a new server
  */
@@ -108,7 +225,7 @@ router.post(
         });
       }
 
-      const { cloudAccountId, name, ipAddress, instanceType, region, instanceId } = req.body;
+      const { cloudAccountId, name, ipAddress, instanceType, region, instanceId, securityGroupId, platform } = req.body;
       const workspaceId = req.user.workspaceId;
 
       // Verify cloud account belongs to this workspace
@@ -157,6 +274,8 @@ router.post(
             region: region?.trim() || cloudAccount.region || null,
             instanceType: instanceType?.trim() || null,
             instanceId: instanceId?.trim() || null,
+            securityGroupId: securityGroupId?.trim() || null,
+            platform: platform?.trim() || null,
             apiKey: apiKey,
             status: 'running'
           },
@@ -727,15 +846,32 @@ router.get('/:id/status', async (req, res) => {
     const instance = response.Reservations[0].Instances[0];
     const status = instance.State?.Name || 'unknown';
 
+    // Determine platform
+    let platform = instance.PlatformDetails || 'Linux/UNIX';
+    // Simplify platform name for better display
+    if (platform.includes('Windows')) {
+      platform = 'Windows';
+    } else if (platform.includes('Red Hat')) {
+      platform = 'Red Hat Linux';
+    } else if (platform.includes('SUSE')) {
+      platform = 'SUSE Linux';
+    } else if (platform.includes('Linux')) {
+      platform = 'Linux';
+    }
+
     // Update in database
     await prisma.server.update({
       where: { id: serverId },
-      data: { status }
+      data: { 
+        status,
+        platform
+      }
     });
 
     res.json({
       success: true,
-      status
+      status,
+      platform
     });
 
   } catch (error) {
@@ -897,12 +1033,26 @@ router.get('/:id/status', async (req, res) => {
     const instance = response.Reservations[0].Instances[0];
     const status = instance.State?.Name || 'unknown';
 
+    // Determine platform
+    let platform = instance.PlatformDetails || 'Linux/UNIX';
+    // Simplify platform name for better display
+    if (platform.includes('Windows')) {
+      platform = 'Windows';
+    } else if (platform.includes('Red Hat')) {
+      platform = 'Red Hat Linux';
+    } else if (platform.includes('SUSE')) {
+      platform = 'SUSE Linux';
+    } else if (platform.includes('Linux')) {
+      platform = 'Linux';
+    }
+
     // Update local database if status changed
-    if (server.status !== status) {
+    if (server.status !== status || server.platform !== platform) {
       await prisma.server.update({
         where: { id: serverId },
         data: { 
           status: status,
+          platform: platform,
           ipAddress: instance.PublicIpAddress || server.ipAddress
         }
       });
@@ -912,6 +1062,7 @@ router.get('/:id/status', async (req, res) => {
       success: true,
       data: {
         status: status,
+        platform: platform,
         ipAddress: instance.PublicIpAddress,
         privateIpAddress: instance.PrivateIpAddress,
         stateTransitionReason: instance.StateTransitionReason
@@ -928,5 +1079,188 @@ router.get('/:id/status', async (req, res) => {
 });
 
 export { agentCommands };
+/**
+ * GET /api/servers/:id/ssh/status
+ * Check if server has per-server SSH credentials configured
+ */
+router.get('/:id/ssh/status', async (req, res) => {
+  try {
+    const serverId = parseInt(req.params.id);
+    const workspaceId = req.user.workspaceId;
+
+    const server = await prisma.server.findFirst({
+      where: {
+        id: serverId,
+        workspaceId
+      },
+      select: {
+        id: true,
+        sshPrivateKey: true,
+        sshUsername: true,
+        sshPort: true,
+        sshConfiguredAt: true,
+        cloudAccount: {
+          select: {
+            sshPrivateKey: true,
+            sshUsername: true,
+            sshPort: true
+          }
+        }
+      }
+    });
+
+    if (!server) {
+      return res.status(404).json({
+        success: false,
+        message: 'Server not found'
+      });
+    }
+
+    // Check if server has its own SSH config
+    const hasServerSSH = !!server.sshPrivateKey;
+    const hasCloudAccountSSH = !!server.cloudAccount?.sshPrivateKey;
+
+    res.json({
+      success: true,
+      serverLevelConfigured: hasServerSSH,
+      cloudAccountLevelConfigured: hasCloudAccountSSH,
+      activeSource: hasServerSSH ? 'server' : (hasCloudAccountSSH ? 'cloud-account' : 'none'),
+      sshUsername: server.sshUsername || server.cloudAccount?.sshUsername,
+      sshPort: server.sshPort || server.cloudAccount?.sshPort || 22,
+      configuredAt: server.sshConfiguredAt
+    });
+
+  } catch (error) {
+    console.error('Get server SSH status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check SSH status'
+    });
+  }
+});
+
+/**
+ * PUT /api/servers/:id/ssh
+ * Configure per-server SSH credentials
+ */
+router.put('/:id/ssh', [
+  body('sshPrivateKey').notEmpty().withMessage('SSH private key is required'),
+  body('sshUsername').notEmpty().withMessage('SSH username is required'),
+  body('sshPort').optional().isInt({ min: 1, max: 65535 }).withMessage('SSH port must be between 1 and 65535')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      });
+    }
+
+    const serverId = parseInt(req.params.id);
+    const workspaceId = req.user.workspaceId;
+    const { sshPrivateKey, sshUsername, sshPort } = req.body;
+
+    // Verify server belongs to workspace
+    const server = await prisma.server.findFirst({
+      where: {
+        id: serverId,
+        workspaceId
+      }
+    });
+
+    if (!server) {
+      return res.status(404).json({
+        success: false,
+        message: 'Server not found'
+      });
+    }
+
+    // Import encryption functions
+    const { encryptSSHKey } = await import('../services/sshLogStreamer.js');
+
+    // Encrypt the SSH private key
+    const encryptedKey = encryptSSHKey(sshPrivateKey);
+
+    // Update server with SSH credentials
+    const updatedServer = await prisma.server.update({
+      where: { id: serverId },
+      data: {
+        sshPrivateKey: encryptedKey,
+        sshUsername,
+        sshPort: sshPort || 22,
+        sshConfiguredAt: new Date()
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Server SSH credentials configured successfully',
+      data: {
+        id: updatedServer.id,
+        sshUsername: updatedServer.sshUsername,
+        sshPort: updatedServer.sshPort,
+        configuredAt: updatedServer.sshConfiguredAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Update server SSH credentials error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update SSH credentials'
+    });
+  }
+});
+
+/**
+ * DELETE /api/servers/:id/ssh
+ * Remove per-server SSH credentials (fall back to cloud account level)
+ */
+router.delete('/:id/ssh', async (req, res) => {
+  try {
+    const serverId = parseInt(req.params.id);
+    const workspaceId = req.user.workspaceId;
+
+    // Verify server belongs to workspace
+    const server = await prisma.server.findFirst({
+      where: {
+        id: serverId,
+        workspaceId
+      }
+    });
+
+    if (!server) {
+      return res.status(404).json({
+        success: false,
+        message: 'Server not found'
+      });
+    }
+
+    // Remove server-level SSH credentials
+    await prisma.server.update({
+      where: { id: serverId },
+      data: {
+        sshPrivateKey: null,
+        sshUsername: null,
+        sshPort: null,
+        sshConfiguredAt: null
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Server SSH credentials removed. Will use cloud account SSH credentials if configured.'
+    });
+
+  } catch (error) {
+    console.error('Delete server SSH credentials error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete SSH credentials'
+    });
+  }
+});
+
 export default router;
 

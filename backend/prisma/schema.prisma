@@ -21,12 +21,15 @@ model Workspace {
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   // Relations
-  users          User[]
-  cloudAccounts  CloudAccount[]
-  servers        Server[]
-  containers     Container[]
-  auditLogs      AuditLog[]
-  schedules      Schedule[]
+  users         User[]
+  cloudAccounts CloudAccount[]
+  servers       Server[]
+  containers    Container[]
+  auditLogs     AuditLog[]
+  schedules     Schedule[]
+  invitations   WorkspaceInvitation[]
+  members       WorkspaceMember[]
+  clusters      Cluster[]
 
   @@index([slug])
   @@map("workspaces")
@@ -34,37 +37,45 @@ model Workspace {
 
 // Users (linked to workspaces)
 model User {
-  id           Int       @id @default(autoincrement())
-  workspaceId  Int       @map("workspace_id")
-  email        String    @unique @db.VarChar(255)
-  passwordHash String    @map("password_hash") @db.VarChar(255)
-  fullName     String    @map("full_name") @db.VarChar(255)
-  role         String    @default("owner") @db.VarChar(50)
-  isActive     Boolean   @default(true) @map("is_active")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  lastLoginAt  DateTime? @map("last_login_at")
+  id                   Int       @id @default(autoincrement())
+  workspaceId          Int       @map("workspace_id")
+  email                String    @unique @db.VarChar(255)
+  passwordHash         String    @map("password_hash") @db.VarChar(255)
+  fullName             String    @map("full_name") @db.VarChar(255)
+  role                 String    @default("owner") @db.VarChar(50)
+  isActive             Boolean   @default(true) @map("is_active")
+  passwordResetToken   String?   @map("password_reset_token") @db.VarChar(255)
+  passwordResetExpires DateTime? @map("password_reset_expires")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  lastLoginAt          DateTime? @map("last_login_at")
 
   // Relations
-  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  auditLogs AuditLog[]
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  auditLogs            AuditLog[]
+  workspaceMemberships WorkspaceMember[]     @relation("UserMemberships")
+  sentInvitations      WorkspaceInvitation[] @relation("InvitedBy")
 
   @@index([workspaceId])
   @@index([email])
+  @@index([passwordResetToken])
   @@map("users")
 }
 
 // Cloud Accounts (AWS, Azure, GCP connections)
 model CloudAccount {
-  id          Int      @id @default(autoincrement())
-  workspaceId Int      @map("workspace_id")
-  provider    String   @db.VarChar(50)
-  accountName String   @map("account_name") @db.VarChar(255)
-  credentials String?  @db.Text
-  region      String?  @db.VarChar(100)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id            Int      @id @default(autoincrement())
+  workspaceId   Int      @map("workspace_id")
+  provider      String   @db.VarChar(50)
+  accountName   String   @map("account_name") @db.VarChar(255)
+  credentials   String?  @db.Text
+  region        String?  @db.VarChar(100)
+  sshPrivateKey String?  @map("ssh_private_key") @db.Text // Encrypted SSH private key for log streaming
+  sshUsername   String?  @map("ssh_username") @db.VarChar(100) // Default: ec2-user, ubuntu, etc.
+  sshPort       Int?     @default(22) @map("ssh_port") // Default SSH port
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   // Relations
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -76,48 +87,171 @@ model CloudAccount {
 
 // Servers (Infrastructure resources)
 model Server {
-  id               Int           @id @default(autoincrement())
-  workspaceId      Int           @map("workspace_id")
-  cloudAccountId   Int?          @map("cloud_account_id")
-  name             String        @db.VarChar(255)
-  ipAddress        String?       @map("ip_address") @db.VarChar(45)
-  provider         String?       @db.VarChar(50)
-  region           String?       @db.VarChar(100)
-  instanceType     String?       @map("instance_type") @db.VarChar(100)
-  instanceId       String?       @map("instance_id") @db.VarChar(255)
-  apiKey           String?       @unique @map("api_key") @db.VarChar(255)
-  status           String        @default("running") @db.VarChar(50)
-  agentVersion     String?       @map("agent_version") @db.VarChar(20)
-  lastAgentContact DateTime?     @map("last_agent_contact")
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
+  id               Int       @id @default(autoincrement())
+  workspaceId      Int       @map("workspace_id")
+  cloudAccountId   Int?      @map("cloud_account_id")
+  name             String    @db.VarChar(255)
+  ipAddress        String?   @map("ip_address") @db.VarChar(45) // Public IP
+  privateIpAddress String?   @map("private_ip_address") @db.VarChar(45) // Private IP for VPC communication
+  provider         String?   @db.VarChar(50)
+  region           String?   @db.VarChar(100)
+  instanceType     String?   @map("instance_type") @db.VarChar(100)
+  instanceId       String?   @map("instance_id") @db.VarChar(255)
+  securityGroupId  String?   @map("security_group_id") @db.VarChar(255) // AWS Security Group ID for auto-configuration
+  vpcId            String?   @map("vpc_id") @db.VarChar(255) // AWS VPC ID
+  subnetId         String?   @map("subnet_id") @db.VarChar(255) // AWS Subnet ID
+  platform         String?   @map("platform") @db.VarChar(100) // OS/Platform (e.g., "Linux/UNIX", "Windows", "Red Hat Enterprise Linux")
+  apiKey           String?   @unique @map("api_key") @db.VarChar(255)
+  status           String    @default("running") @db.VarChar(50)
+  agentVersion     String?   @map("agent_version") @db.VarChar(20)
+  lastAgentContact DateTime? @map("last_agent_contact")
+
+  // Per-Server SSH Credentials (override cloud account credentials if set)
+  sshPrivateKey   String?   @map("ssh_private_key") @db.Text // Encrypted SSH private key specific to this server
+  sshUsername     String?   @map("ssh_username") @db.VarChar(100) // SSH username for this server
+  sshPort         Int?      @map("ssh_port") // SSH port for this server
+  sshConfiguredAt DateTime? @map("ssh_configured_at") // When server-level SSH was configured
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  cloudAccount CloudAccount? @relation(fields: [cloudAccountId], references: [id], onDelete: SetNull)
-  containers   Container[]
-  schedules    Schedule[]
+  workspace       Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cloudAccount    CloudAccount?          @relation(fields: [cloudAccountId], references: [id], onDelete: SetNull)
+  containers      Container[]
+  schedules       Schedule[]
+  networkTraffic  NetworkTrafficHourly[]
+  clusterNodes    ClusterNode[]
+  hadoopNodeRoles HadoopNodeRole[]
 
   @@index([workspaceId])
   @@index([apiKey])
   @@map("servers")
 }
 
+// Kubernetes & Hadoop Clusters
+model Cluster {
+  id          Int     @id @default(autoincrement())
+  workspaceId Int     @map("workspace_id")
+  name        String  @db.VarChar(255)
+  type        String  @db.VarChar(50) // "kubernetes", "k3s", "hdfs"
+  status      String  @db.VarChar(50) // "creating", "running", "error", "deleting"
+  version     String? @db.VarChar(50) // "1.28.0", "3.3.4"
+
+  // Kubernetes-specific fields
+  networkPlugin String? @map("network_plugin") @db.VarChar(50) // "calico", "flannel", "cilium"
+  kubeconfig    String? @db.Text // Encrypted kubeconfig file
+
+  // HDFS-specific fields
+  distribution String? @db.VarChar(50) // "apache", "hdp", "cdp", "mapr"
+  hdfsConfig   Json?   @map("hdfs_config") // HDFS configuration (replication, block size, etc.)
+
+  // Common fields
+  apiEndpoint           String?   @map("api_endpoint") @db.VarChar(255) // K8s: https://10.0.1.10:6443, HDFS: http://10.0.1.10:8080 (Ambari)
+  nodeCount             Int       @default(0) @map("node_count")
+  connectivityStatus    String    @default("unknown") @map("connectivity_status") @db.VarChar(50) // "connected", "unreachable", "unknown"
+  connectivityMode      String    @default("manual") @map("connectivity_mode") @db.VarChar(50) // "auto", "manual"
+  lastConnectivityCheck DateTime? @map("last_connectivity_check")
+  connectivityError     String?   @map("connectivity_error") @db.Text
+  createdBy             Int?      @map("created_by")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  nodes           ClusterNode[]
+  hadoopServices  HadoopService[]
+  hadoopNodeRoles HadoopNodeRole[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([type])
+  @@index([connectivityStatus])
+  @@map("clusters")
+}
+
+// Hadoop/HDFS Services (Spark, Hive, Kafka, etc.)
+model HadoopService {
+  id             Int       @id @default(autoincrement())
+  clusterId      Int       @map("cluster_id")
+  serviceName    String    @map("service_name") @db.VarChar(50) // 'hdfs', 'yarn', 'spark', 'hive', etc.
+  serviceVersion String?   @map("service_version") @db.VarChar(20)
+  status         String    @db.VarChar(50) // 'installing', 'running', 'stopped', 'failed'
+  config         Json? // Service-specific configuration
+  installedAt    DateTime? @map("installed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  cluster Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@index([clusterId])
+  @@index([status])
+  @@map("hadoop_services")
+}
+
+// Hadoop Node Roles (which services run on which node)
+model HadoopNodeRole {
+  id        Int      @id @default(autoincrement())
+  clusterId Int      @map("cluster_id")
+  serverId  Int      @map("server_id")
+  role      String   @db.VarChar(50) // 'namenode', 'datanode', 'resourcemanager', 'nodemanager', etc.
+  isPrimary Boolean  @default(false) @map("is_primary") // For active/standby setup
+  createdAt DateTime @default(now()) @map("created_at")
+
+  cluster Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  server  Server  @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([clusterId])
+  @@index([serverId])
+  @@map("hadoop_node_roles")
+}
+
+model ClusterNode {
+  id          Int       @id @default(autoincrement())
+  clusterId   Int       @map("cluster_id")
+  serverId    Int?      @map("server_id") // Link to existing Server if applicable
+  nodeName    String    @map("node_name") @db.VarChar(255)
+  role        String    @db.VarChar(50) // "master", "worker"
+  status      String    @db.VarChar(50) // "joining", "ready", "not-ready", "error"
+  cpuUsage    Float?    @map("cpu_usage")
+  memoryUsage Float?    @map("memory_usage")
+  podCount    Int?      @map("pod_count")
+  conditions  Json? // Node conditions, labels, etc.
+  joinedAt    DateTime? @map("joined_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  cluster Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  server  Server? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+
+  @@index([clusterId])
+  @@index([serverId])
+  @@map("cluster_nodes")
+}
+
 // Scheduled Downtime (for server automation)
 model Schedule {
-  id             Int       @id @default(autoincrement())
-  workspaceId    Int       @map("workspace_id")
-  serverId       Int       @map("server_id")
-  name           String    @db.VarChar(255)
-  action         String    @db.VarChar(50)   // 'stop', 'start', 'reboot'
-  rrule          String    @db.Text          // RRule string (e.g., 'FREQ=DAILY;BYHOUR=21')
-  timezone       String    @db.VarChar(100)  @default("UTC")
-  enabled        Boolean   @default(true)
-  nextRunAt      DateTime  @map("next_run_at")
-  lastRunAt      DateTime? @map("last_run_at")
-  executionCount Int       @default(0) @map("execution_count")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id                       Int       @id @default(autoincrement())
+  workspaceId              Int       @map("workspace_id")
+  serverId                 Int       @map("server_id")
+  name                     String    @db.VarChar(255)
+  action                   String    @db.VarChar(50) // 'stop', 'start', 'reboot', 'scale_down', 'scale_up'
+  rrule                    String    @db.Text // RRule string (e.g., 'FREQ=DAILY;BYHOUR=21')
+  timezone                 String    @default("UTC") @db.VarChar(100)
+  enabled                  Boolean   @default(true)
+  nextRunAt                DateTime  @map("next_run_at")
+  lastRunAt                DateTime? @map("last_run_at")
+  executionCount           Int       @default(0) @map("execution_count")
+  targetInstanceType       String?   @map("target_instance_type") @db.VarChar(100) // For scale_down/scale_up actions
+  originalInstanceType     String?   @map("original_instance_type") @db.VarChar(100) // Store original for scale_up
+  // EBS Volume scaling fields
+  targetVolumeSize         Int?      @map("target_volume_size") // In GB
+  targetVolumeType         String?   @map("target_volume_type") @db.VarChar(50) // gp2, gp3, io1, io2, st1, sc1
+  targetVolumeIops         Int?      @map("target_volume_iops") // Provisioned IOPS
+  targetVolumeThroughput   Int?      @map("target_volume_throughput") // MB/s for gp3
+  originalVolumeSize       Int?      @map("original_volume_size")
+  originalVolumeType       String?   @map("original_volume_type") @db.VarChar(50)
+  originalVolumeIops       Int?      @map("original_volume_iops")
+  originalVolumeThroughput Int?      @map("original_volume_throughput")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
 
   // Relations
   workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -136,9 +270,9 @@ model ScheduleExecution {
   id         Int      @id @default(autoincrement())
   scheduleId Int      @map("schedule_id")
   action     String   @db.VarChar(50)
-  status     String   @db.VarChar(50)   // 'success', 'failed'
+  status     String   @db.VarChar(50) // 'success', 'failed'
   errorMsg   String?  @map("error_msg") @db.Text
-  duration   Int                         // milliseconds
+  duration   Int // milliseconds
   executedAt DateTime @default(now()) @map("executed_at")
 
   // Relations
@@ -187,4 +321,72 @@ model AuditLog {
   @@index([workspaceId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// Workspace Invitations
+model WorkspaceInvitation {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int       @map("workspace_id")
+  email       String    @db.VarChar(255)
+  token       String    @unique @db.VarChar(255)
+  role        String    @default("member") @db.VarChar(50) // admin, member, viewer
+  status      String    @default("pending") @db.VarChar(50) // pending, accepted, expired, revoked
+  invitedBy   Int       @map("invited_by")
+  expiresAt   DateTime  @map("expires_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  inviter   User      @relation("InvitedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([token])
+  @@index([status])
+  @@map("workspace_invitations")
+}
+
+// Workspace Members (Junction table for multi-workspace support)
+model WorkspaceMember {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  workspaceId Int      @map("workspace_id")
+  role        String   @default("member") @db.VarChar(50) // admin, member, viewer
+  joinedAt    DateTime @default(now()) @map("joined_at")
+
+  // Relations
+  user      User      @relation("UserMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([userId])
+  @@index([workspaceId])
+  @@map("workspace_members")
+}
+
+// Network Traffic Hourly Aggregates (for traffic pattern analysis)
+model NetworkTrafficHourly {
+  id            Int      @id @default(autoincrement())
+  serverId      Int      @map("server_id")
+  hourTimestamp DateTime @map("hour_timestamp")
+  avgInMbps     Decimal  @default(0) @map("avg_in_mbps") @db.Decimal(10, 2)
+  avgOutMbps    Decimal  @default(0) @map("avg_out_mbps") @db.Decimal(10, 2)
+  maxInMbps     Decimal  @default(0) @map("max_in_mbps") @db.Decimal(10, 2)
+  maxOutMbps    Decimal  @default(0) @map("max_out_mbps") @db.Decimal(10, 2)
+  minInMbps     Decimal  @default(0) @map("min_in_mbps") @db.Decimal(10, 2)
+  minOutMbps    Decimal  @default(0) @map("min_out_mbps") @db.Decimal(10, 2)
+  totalInMb     Decimal  @default(0) @map("total_in_mb") @db.Decimal(12, 2)
+  totalOutMb    Decimal  @default(0) @map("total_out_mb") @db.Decimal(12, 2)
+  samplesCount  Int      @default(0) @map("samples_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, hourTimestamp], name: "network_traffic_hourly_server_hour_unique")
+  @@index([serverId], name: "network_traffic_hourly_server_id_idx")
+  @@index([hourTimestamp(sort: Desc)], name: "network_traffic_hourly_timestamp_idx")
+  @@map("network_traffic_hourly")
 }

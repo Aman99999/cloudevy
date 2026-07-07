@@ -86,6 +86,27 @@ services:
     networks:
       - cloudevy-net
 
+  user-management:
+    image: docker.io/cloudevy/cloudevy-user-management:latest
+    platform: linux/amd64
+    container_name: cloudevy-user-management
+    ports:
+      - "8004:8004"
+    environment:
+      - NODE_ENV=production
+      - PORT=8004
+      - DATABASE_URL=postgresql://cloudevy:cloudevy_secure_db_pass_2024@postgres:5432/cloudevy?schema=public
+      - CORS_ORIGIN=https://cloudevy.in
+      - FRONTEND_URL=https://cloudevy.in
+      - GMAIL_USER=kharea67@gmail.com
+      - GMAIL_APP_PASSWORD=nvldyaakzpdymvea
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - backend
+    networks:
+      - cloudevy-net
+
   nginx:
     image: nginx:alpine
     container_name: cloudevy-nginx

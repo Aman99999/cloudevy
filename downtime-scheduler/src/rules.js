@@ -25,14 +25,8 @@ export class RuleManager {
   /**
    * Get the next occurrence of a schedule based on its rrule
    * 
-   * IMPORTANT: RRule stores times in UTC internally, but BYHOUR/BYMINUTE 
-   * are interpreted in the local timezone where the rule was created.
-   * 
-   * We store nextRunAt in UTC in the database, but the scheduler
-   * will execute based on the server's system time.
-   * 
    * @param {string} rruleString - The rrule string (e.g., "FREQ=DAILY;BYHOUR=18;BYMINUTE=49")
-   * @param {string} timezone - Timezone (e.g., 'Asia/Kolkata') - currently not used, times are in UTC
+   * @param {string} timezone - Timezone (e.g., 'Asia/Kolkata')
    * @returns {Date|null} - Next occurrence in UTC
    */
   static getNextOccurrence(rruleString, timezone = 'UTC') {
@@ -40,16 +34,74 @@ export class RuleManager {
       // Parse the rrule string
       const rule = rrulestr(rruleString);
 
-      // Get next occurrence after now (in UTC)
-      const now = new Date();
-      const next = rule.after(now, true); // true = inclusive
+      // The rrule BYHOUR/BYMINUTE values represent time in the USER's timezone
+      // But RRule.after() interprets them as UTC
+      // So we need to:
+      // 1. Get current time in user's timezone
+      // 2. Calculate next occurrence in that timezone
+      // 3. Convert back to UTC for storage
 
-      // Normalize to minute precision (remove seconds/ms)
-      return next ? this.normalizeToMinute(next) : null;
+      const nowUTC = new Date();
+      
+      if (timezone && timezone !== 'UTC') {
+        // Get timezone offset
+        const offset = this.getTimezoneOffsetMs(timezone, nowUTC);
+        
+        // Convert current time to user's timezone (as UTC representation)
+        const nowInUserTz = new Date(nowUTC.getTime() - offset);
+        
+        // Get next occurrence (interpreted in user's timezone)
+        const nextInUserTz = rule.after(nowInUserTz, false);
+        
+        if (!nextInUserTz) return null;
+        
+        // Convert back to actual UTC
+        const nextUTC = new Date(nextInUserTz.getTime() + offset);
+        
+        // Normalize to minute precision
+        return this.normalizeToMinute(nextUTC);
+      } else {
+        // UTC timezone - direct calculation
+        const next = rule.after(nowUTC, false);
+        return next ? this.normalizeToMinute(next) : null;
+      }
 
     } catch (error) {
       console.error('❌ Error parsing rrule:', error);
       return null;
+    }
+  }
+
+  /**
+   * Get timezone offset in milliseconds
+   */
+  static getTimezoneOffsetMs(timezone, date = new Date()) {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+      
+      const parts = formatter.formatToParts(date);
+      const tzParts = {};
+      parts.forEach(({ type, value }) => {
+        tzParts[type] = value;
+      });
+      
+      const tzDateStr = `${tzParts.year}-${tzParts.month}-${tzParts.day}T${tzParts.hour}:${tzParts.minute}:${tzParts.second}Z`;
+      const tzDate = new Date(tzDateStr);
+      
+      return date.getTime() - tzDate.getTime();
+      
+    } catch (error) {
+      console.error(`Error calculating timezone offset for ${timezone}:`, error);
+      return 0;
     }
   }
 

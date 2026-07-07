@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
+import axios from 'axios';
 import { authenticate } from '../middleware/auth.js';
 import prisma from '../config/prisma.js';
 import { slugify } from '../utils/slugify.js';
@@ -293,6 +294,196 @@ router.post(
     }
   }
 );
+
+/**
+ * POST /api/auth/signup-invited
+ * Create account from workspace invitation
+ */
+router.post('/signup-invited', async (req, res) => {
+  try {
+    const { email, password, fullName, inviteToken } = req.body;
+
+    if (!email || !password || !fullName || !inviteToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'All fields are required'
+      });
+    }
+
+    // Verify invitation exists and is valid
+    const invitation = await prisma.workspaceInvitation.findUnique({
+      where: { token: inviteToken },
+      include: { workspace: true }
+    });
+
+    if (!invitation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid invitation token'
+      });
+    }
+
+    if (invitation.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invitation has already been used or expired'
+      });
+    }
+
+    if (new Date() > invitation.expiresAt) {
+      await prisma.workspaceInvitation.update({
+        where: { id: invitation.id },
+        data: { status: 'expired' }
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Invitation has expired'
+      });
+    }
+
+    if (invitation.email.toLowerCase() !== email.toLowerCase()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email does not match invitation'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'An account with this email already exists. Please login instead.'
+      });
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Create user and accept invitation in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create user
+      const user = await tx.user.create({
+        data: {
+          workspaceId: invitation.workspaceId,
+          email: email.toLowerCase(),
+          passwordHash,
+          fullName,
+          role: invitation.role
+        }
+      });
+
+      // Create workspace membership
+      await tx.workspaceMember.create({
+        data: {
+          userId: user.id,
+          workspaceId: invitation.workspaceId,
+          role: invitation.role
+        }
+      });
+
+      // Mark invitation as accepted
+      await tx.workspaceInvitation.update({
+        where: { id: invitation.id },
+        data: {
+          status: 'accepted'
+        }
+      });
+
+      return { user, workspace: invitation.workspace };
+    });
+
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        userId: result.user.id,
+        workspaceId: result.workspace.id,
+        email: result.user.email,
+        role: result.user.role
+      },
+      process.env.JWT_SECRET || 'dev_jwt_secret_key_12345',
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Account created successfully',
+      token,
+      user: {
+        id: result.user.id,
+        name: result.user.fullName,
+        email: result.user.email,
+        role: result.user.role,
+        workspace: {
+          id: result.workspace.id,
+          name: result.workspace.name,
+          slug: result.workspace.slug
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Signup invited error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create account'
+    });
+  }
+});
+
+// User Management Service URL
+const USER_MGMT_URL = process.env.USER_MGMT_URL || 'http://user-management:8004';
+
+/**
+ * POST /api/auth/forgot-password
+ * Request password reset (proxied to user-management service)
+ */
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const response = await axios.post(
+      `${USER_MGMT_URL}/api/password-reset/forgot`,
+      req.body,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    console.error('Forgot password proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { success: false, message: 'Service unavailable' }
+    );
+  }
+});
+
+/**
+ * POST /api/auth/reset-password
+ * Reset password with token (proxied to user-management service)
+ */
+router.post('/reset-password', async (req, res) => {
+  try {
+    const response = await axios.post(
+      `${USER_MGMT_URL}/api/password-reset/reset`,
+      req.body,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    console.error('Reset password proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(
+      error.response?.data || { success: false, message: 'Service unavailable' }
+    );
+  }
+});
 
 export default router;
 

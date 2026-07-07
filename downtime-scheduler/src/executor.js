@@ -9,7 +9,10 @@ import {
   StopInstancesCommand,
   StartInstancesCommand,
   RebootInstancesCommand,
-  DescribeInstancesCommand
+  DescribeInstancesCommand,
+  ModifyInstanceAttributeCommand,
+  DescribeVolumesCommand,
+  ModifyVolumeCommand
 } from '@aws-sdk/client-ec2';
 import prisma from './config/prisma.js';
 import crypto from 'crypto';
@@ -44,7 +47,7 @@ export async function executeSchedule(schedule) {
     }
 
     // Update server status in database after successful execution
-    await updateServerStatus(schedule.server.id, schedule.action);
+    await updateServerStatus(schedule.server.id, schedule.action, schedule.targetInstanceType);
 
     console.log(`✅ Success: ${schedule.action} completed in ${Date.now() - startTime}ms`);
 
@@ -73,9 +76,10 @@ export async function executeSchedule(schedule) {
 /**
  * Update server status in database based on action
  */
-async function updateServerStatus(serverId, action) {
+async function updateServerStatus(serverId, action, targetInstanceType = null) {
   try {
     let newStatus;
+    const updateData = {};
     
     switch (action) {
       case 'stop':
@@ -87,17 +91,27 @@ async function updateServerStatus(serverId, action) {
       case 'reboot':
         newStatus = 'rebooting';
         break;
+      case 'scale_down':
+      case 'scale_up':
+        newStatus = 'scaling';
+        // Update instance type in database if provided
+        if (targetInstanceType) {
+          updateData.instanceType = targetInstanceType;
+        }
+        break;
       default:
         console.warn(`   ⚠️  Unknown action "${action}", not updating status`);
         return;
     }
 
+    updateData.status = newStatus;
+
     await prisma.server.update({
       where: { id: serverId },
-      data: { status: newStatus }
+      data: updateData
     });
 
-    console.log(`   📊 Database status updated to: ${newStatus}`);
+    console.log(`   📊 Database status updated to: ${newStatus}${targetInstanceType ? ` with instance type: ${targetInstanceType}` : ''}`);
 
   } catch (error) {
     console.error('   ⚠️  Failed to update server status in DB:', error.message);
@@ -146,6 +160,24 @@ async function executeAWSAction(schedule) {
         throw new Error(`Cannot reboot instance in state: ${currentState}`);
       }
       await rebootInstance(client, server.instanceId);
+      break;
+
+    case 'scale_down':
+    case 'scale_up':
+      // Handle instance type modification if specified
+      if (schedule.targetInstanceType) {
+        await modifyInstanceType(client, server.instanceId, schedule.targetInstanceType, currentState);
+      }
+      
+      // Handle EBS volume modification if specified
+      if (schedule.targetVolumeSize || schedule.targetVolumeType || schedule.targetVolumeIops || schedule.targetVolumeThroughput) {
+        await modifyEBSVolume(client, server.instanceId, {
+          size: schedule.targetVolumeSize,
+          volumeType: schedule.targetVolumeType,
+          iops: schedule.targetVolumeIops,
+          throughput: schedule.targetVolumeThroughput
+        });
+      }
       break;
 
     default:
@@ -213,6 +245,219 @@ async function rebootInstance(client, instanceId) {
   await client.send(command);
   console.log(`   🔄 Reboot command sent for instance ${instanceId}`);
 }
+
+/**
+ * Modify EC2 instance type (scale up/down)
+ * NOTE: Instance must be stopped before modifying instance type
+ */
+async function modifyInstanceType(client, instanceId, targetInstanceType, currentState) {
+  if (!targetInstanceType) {
+    throw new Error('Target instance type not specified');
+  }
+
+  console.log(`   🔧 Modifying instance type to: ${targetInstanceType}`);
+  
+  try {
+    // Step 1: Stop the instance if it's running
+    const needsStop = currentState === 'running' || currentState === 'pending';
+    if (needsStop) {
+      console.log(`   ⏹️  Stopping instance before modification...`);
+      await stopInstance(client, instanceId);
+      
+      // Wait for instance to stop (AWS requires stopped state)
+      await waitForInstanceState(client, instanceId, 'stopped', 180000); // 3 minutes timeout
+    }
+
+    // Step 2: Modify the instance type
+    const modifyCommand = new ModifyInstanceAttributeCommand({
+      InstanceId: instanceId,
+      InstanceType: {
+        Value: targetInstanceType
+      }
+    });
+
+    await client.send(modifyCommand);
+    console.log(`   ✅ Instance type modified to: ${targetInstanceType}`);
+
+    // Step 3: Start the instance again if it was running
+    if (needsStop) {
+      console.log(`   ▶️  Starting instance after modification...`);
+      await startInstance(client, instanceId);
+    }
+  } catch (error) {
+    console.error(`   ❌ Failed to modify instance type:`, error.message);
+    console.error(`   ❌ Error details:`, {
+      name: error.name,
+      code: error.Code || error.code,
+      statusCode: error.$metadata?.httpStatusCode,
+      requestId: error.$metadata?.requestId
+    });
+    
+    // Provide more helpful error messages
+    if (error.message?.includes('not available for free plan') || 
+        error.message?.includes('not supported') ||
+        error.name === 'SubscriptionRequiredException') {
+      throw new Error(`AWS Error: ${error.message}. This is likely an IAM permission issue OR instance type compatibility issue. Required IAM permissions: ec2:ModifyInstanceAttribute, ec2:StopInstances, ec2:StartInstances. Also check if instance types are compatible.`);
+    } else if (error.name === 'UnauthorizedOperation' || error.name === 'AccessDenied') {
+      throw new Error(`IAM permission denied: ${error.message}. Required permissions: ec2:ModifyInstanceAttribute, ec2:StopInstances, ec2:StartInstances, ec2:DescribeInstances. Make sure permissions are attached to the correct IAM user and have propagated (wait 10 minutes).`);
+    } else if (error.name === 'InvalidParameterValue') {
+      throw new Error(`Invalid instance type "${targetInstanceType}": ${error.message}. Check if the target type is compatible with your current configuration (same virtualization type, architecture, etc).`);
+    } else if (error.name === 'UnsupportedOperation') {
+      throw new Error(`Unsupported operation: ${error.message}. This instance might not support type changes (e.g., EC2-Classic instances, or incompatible instance families).`);
+    }
+    
+    throw error;
+  }
+}
+
+/**
+ * Wait for instance to reach desired state
+ */
+async function waitForInstanceState(client, instanceId, desiredState, timeout = 180000) {
+  const startTime = Date.now();
+  const pollInterval = 5000; // 5 seconds
+
+  while (Date.now() - startTime < timeout) {
+    const currentState = await getInstanceState(client, instanceId);
+    
+    if (currentState === desiredState) {
+      console.log(`   ✅ Instance reached state: ${desiredState}`);
+      return;
+    }
+
+    console.log(`   ⏳ Waiting for state "${desiredState}"... Current: ${currentState}`);
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+  }
+
+  throw new Error(`Timeout waiting for instance to reach state: ${desiredState}`);
+}
+
+/**
+ * Modify EBS Volume (can be done while instance is running!)
+ * Supports: Size, Type, IOPS, Throughput
+ */
+async function modifyEBSVolume(client, instanceId, options) {
+  const { size, volumeType, iops, throughput } = options;
+  
+  console.log(`   💾 Modifying EBS volume...`);
+  
+  try {
+    // Step 1: Get the root volume ID from the instance
+    const volumeId = await getRootVolumeId(client, instanceId);
+    
+    if (!volumeId) {
+      throw new Error('Could not find root volume for instance');
+    }
+    
+    console.log(`   📀 Root volume ID: ${volumeId}`);
+    
+    // Step 2: Get current volume details
+    const currentVolume = await getVolumeDetails(client, volumeId);
+    console.log(`   📊 Current volume: ${currentVolume.VolumeType}, ${currentVolume.Size}GB`);
+    
+    // Step 3: Build modification request
+    const modifyParams = {
+      VolumeId: volumeId
+    };
+    
+    if (size && size !== currentVolume.Size) {
+      if (size < currentVolume.Size) {
+        console.warn(`   ⚠️  Cannot shrink volume from ${currentVolume.Size}GB to ${size}GB. Skipping size modification.`);
+      } else {
+        modifyParams.Size = size;
+        console.log(`   📈 Changing size: ${currentVolume.Size}GB → ${size}GB`);
+      }
+    }
+    
+    if (volumeType && volumeType !== currentVolume.VolumeType) {
+      modifyParams.VolumeType = volumeType;
+      console.log(`   🔄 Changing type: ${currentVolume.VolumeType} → ${volumeType}`);
+    }
+    
+    if (iops !== undefined && iops !== currentVolume.Iops) {
+      modifyParams.Iops = iops;
+      console.log(`   ⚡ Changing IOPS: ${currentVolume.Iops} → ${iops}`);
+    }
+    
+    if (throughput !== undefined && throughput !== currentVolume.Throughput) {
+      modifyParams.Throughput = throughput;
+      console.log(`   🚀 Changing throughput: ${currentVolume.Throughput} → ${throughput} MB/s`);
+    }
+    
+    // Check if there are any actual changes
+    if (Object.keys(modifyParams).length === 1) {
+      console.log(`   ⏭️  No volume modifications needed`);
+      return;
+    }
+    
+    // Step 4: Modify the volume
+    const modifyCommand = new ModifyVolumeCommand(modifyParams);
+    const result = await client.send(modifyCommand);
+    
+    console.log(`   ✅ EBS volume modification initiated`);
+    console.log(`   ℹ️  Modification state: ${result.VolumeModification?.ModificationState}`);
+    console.log(`   ℹ️  Volume will optimize in the background (no downtime)`);
+    
+  } catch (error) {
+    console.error(`   ❌ Failed to modify EBS volume:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get root volume ID for an instance
+ */
+async function getRootVolumeId(client, instanceId) {
+  try {
+    const command = new DescribeInstancesCommand({
+      InstanceIds: [instanceId]
+    });
+    
+    const response = await client.send(command);
+    
+    if (!response.Reservations || response.Reservations.length === 0) {
+      throw new Error('Instance not found');
+    }
+    
+    const instance = response.Reservations[0].Instances[0];
+    const rootDevice = instance.RootDeviceName;
+    
+    // Find the root volume
+    const rootVolume = instance.BlockDeviceMappings?.find(
+      mapping => mapping.DeviceName === rootDevice
+    );
+    
+    return rootVolume?.Ebs?.VolumeId;
+    
+  } catch (error) {
+    console.error('   ⚠️  Failed to get root volume ID:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get volume details
+ */
+async function getVolumeDetails(client, volumeId) {
+  try {
+    const command = new DescribeVolumesCommand({
+      VolumeIds: [volumeId]
+    });
+    
+    const response = await client.send(command);
+    
+    if (!response.Volumes || response.Volumes.length === 0) {
+      throw new Error('Volume not found');
+    }
+    
+    return response.Volumes[0];
+    
+  } catch (error) {
+    console.error('   ⚠️  Failed to get volume details:', error.message);
+    throw error;
+  }
+}
+
 
 /**
  * Create EC2 client with decrypted credentials

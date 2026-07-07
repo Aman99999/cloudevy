@@ -91,6 +91,30 @@ services:
     networks:
       - cloudevy-network
 
+  user-management:
+    build:
+      context: .
+      dockerfile: user-management/Dockerfile
+    platform: linux/arm64
+    image: cloudevy-user-management:latest
+    container_name: cloudevy-user-management
+    ports:
+      - "8004:8004"
+    environment:
+      - NODE_ENV=development
+      - PORT=8004
+      - DATABASE_URL=postgresql://cloudevy:cloudevy_dev_password@postgres:5433/cloudevy?schema=public
+      - CORS_ORIGIN=http://localhost:8001
+      - FRONTEND_URL=http://localhost:8001
+      - GMAIL_USER=kharea67@gmail.com
+      - GMAIL_APP_PASSWORD=nvldyaakzpdymvea
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - backend
+    networks:
+      - cloudevy-network
+
   influxdb:
     image: influxdb:2.7-alpine
     platform: linux/arm64

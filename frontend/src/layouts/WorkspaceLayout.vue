@@ -30,15 +30,15 @@
                 Servers
               </router-link>
               <router-link
-                :to="`/${workspaceSlug}/containers`"
+                :to="`/${workspaceSlug}/clusters`"
                 :class="[
                   'px-1 pb-4 text-sm font-medium transition',
-                  $route.name === 'Containers' 
+                  $route.name === 'Clusters' 
                     ? 'text-indigo-400 border-b-2 border-indigo-400' 
                     : 'text-gray-300 hover:text-white'
                 ]"
               >
-                Containers
+                Clusters
               </router-link>
               <router-link
                 :to="`/${workspaceSlug}/costs`"
@@ -50,6 +50,17 @@
                 ]"
               >
                 Costs
+              </router-link>
+              <router-link
+                :to="`/${workspaceSlug}/team`"
+                :class="[
+                  'px-1 pb-4 text-sm font-medium transition',
+                  $route.name === 'Team' 
+                    ? 'text-indigo-400 border-b-2 border-indigo-400' 
+                    : 'text-gray-300 hover:text-white'
+                ]"
+              >
+                Team
               </router-link>
             </div>
           </div>
